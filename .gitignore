@@ -1,0 +1,8 @@
+node_modules/
+client/dist/
+server/database.sqlite
+server/database.sqlite-journal
+.DS_Store
+.idea/
+.vscode/
+*.local

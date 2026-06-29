@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: party-bingo
+    runtime: node
+    plan: free
+    buildCommand: cd client && npm install && npm run build && cd ../server && npm install && npm rebuild sqlite3 --build-from-source
+    startCommand: cd server && npm start
+    envVars:
+      - key: PORT
+        value: 3001
+      - key: NODE_VERSION
+        value: 20

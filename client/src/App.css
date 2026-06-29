@@ -1,0 +1,622 @@
+@import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@300..700&display=swap');
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+:root {
+  --primary: #ec4899;      /* Neon Pink */
+  --secondary: #6366f1;    /* Neon Indigo */
+  --success: #10b981;      /* Emerald Green */
+  --danger: #f43f5e;       /* Rose Red */
+  --warning: #f59e0b;      /* Amber Gold */
+  --background: #0d0526;   /* Midnight Purple */
+  --card-bg: rgba(23, 15, 48, 0.7); /* Translucent Purple Card */
+  --text-main: #fbf9ff;
+  --text-muted: #9c8fb9;
+  --accent: #a855f7;       /* Electric Violet */
+}
+
+body {
+  margin: 0;
+  font-family: 'Fredoka', -apple-system, sans-serif;
+  background-color: var(--background);
+  background-image: 
+    radial-gradient(at 0% 0%, rgba(236, 72, 153, 0.25) 0px, transparent 50%),
+    radial-gradient(at 100% 100%, rgba(99, 102, 241, 0.2) 0px, transparent 50%),
+    radial-gradient(at 50% 50%, rgba(168, 85, 247, 0.15) 0px, transparent 70%);
+  color: var(--text-main);
+  min-height: 100vh;
+}
+
+.app-container {
+  max-width: 450px;
+  margin: 0 auto;
+  padding: 2rem 1rem;
+}
+
+.card {
+  background: var(--card-bg);
+  padding: 2rem;
+  border-radius: 2rem;
+  box-shadow: 
+    0 25px 50px -12px rgba(0, 0, 0, 0.7),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.15),
+    inset 0 -1px 0 0 rgba(0, 0, 0, 0.4);
+  margin-bottom: 2rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(16px);
+}
+
+h1, h2, h3 {
+  margin-top: 0;
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  line-height: 1.2;
+  background: linear-gradient(to right, #fff, var(--accent));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+button {
+  padding: 1rem 1.5rem;
+  border-radius: 1.25rem;
+  border: none;
+  background: linear-gradient(135deg, var(--primary) 0%, #4f46e5 100%);
+  color: white;
+  font-weight: 700;
+  font-size: 1.125rem;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 10px 15px -3px rgba(79, 70, 229, 0.3);
+}
+
+button:hover {
+  transform: translateY(-2px) scale(1.02);
+  box-shadow: 0 20px 25px -5px rgba(79, 70, 229, 0.4);
+}
+
+button:active {
+  transform: translateY(0) scale(1);
+}
+
+.bingo-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin: 2.5rem 0;
+}
+
+.bingo-cell {
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(15, 23, 42, 0.6);
+  font-weight: 900;
+  font-size: 2.5rem;
+  cursor: pointer;
+  transition: all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  color: #fff;
+  border-radius: 1.5rem;
+  border: 2px solid rgba(255, 255, 255, 0.05);
+  box-shadow: inset 0 2px 4px 0 rgba(255, 255, 255, 0.05);
+  position: relative;
+  overflow: hidden;
+}
+
+/* User daubed this number */
+.bingo-cell.daubed {
+  background: rgba(168, 85, 247, 0.35); /* Translucent purple */
+  border-color: rgba(168, 85, 247, 0.6);
+  box-shadow: 0 0 15px rgba(168, 85, 247, 0.3);
+  text-shadow: 0 0 8px rgba(168, 85, 247, 0.8);
+}
+
+/* Host has called this number but user hasn't daubed it yet */
+.bingo-cell.called:not(.daubed) {
+  border-color: var(--warning);
+  box-shadow: 0 0 10px rgba(245, 158, 11, 0.3), inset 0 0 6px rgba(245, 158, 11, 0.2);
+  animation: pulse-border 1.5s infinite;
+}
+
+/* User daubed a correctly called number! (Match!) */
+.bingo-cell.daubed.called {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  border-color: #34d399;
+  transform: scale(0.95);
+  box-shadow: 0 0 25px rgba(16, 185, 129, 0.5), inset 0 2px 4px 0 rgba(255, 255, 255, 0.2);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+@keyframes pulse-border {
+  0% { border-color: rgba(245, 158, 11, 0.4); }
+  50% { border-color: rgba(245, 158, 11, 1); }
+  100% { border-color: rgba(245, 158, 11, 0.4); }
+}
+
+/* Called Number display as a 3D Bingo Ball */
+.called-number-display-wrapper {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin: 1.5rem 0;
+}
+
+@keyframes float {
+  0% { transform: translateY(0px) rotate(0deg); }
+  50% { transform: translateY(-8px) rotate(2deg); }
+  100% { transform: translateY(0px) rotate(0deg); }
+}
+
+@keyframes popBall {
+  0% { transform: scale(0.3) rotate(-180deg); opacity: 0; }
+  70% { transform: scale(1.1) rotate(10deg); opacity: 1; }
+  100% { transform: scale(1) rotate(0deg); }
+}
+
+.bingo-ball {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, var(--primary), #be185d 60%, #500724);
+  box-shadow: 
+    inset -15px -15px 30px rgba(0, 0, 0, 0.6),
+    inset 15px 15px 30px rgba(255, 255, 255, 0.25),
+    0 15px 25px rgba(0, 0, 0, 0.4),
+    0 0 30px rgba(236, 72, 153, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  transition: all 0.3s ease;
+}
+
+.bingo-ball.active {
+  animation: popBall 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) forwards, float 4s ease-in-out infinite 0.6s;
+}
+
+.bingo-ball.idle {
+  background: radial-gradient(circle at 35% 35%, #475569, #334155 60%, #1e293b);
+  box-shadow: 
+    inset -15px -15px 30px rgba(0, 0, 0, 0.6),
+    inset 15px 15px 30px rgba(255, 255, 255, 0.1),
+    0 10px 20px rgba(0, 0, 0, 0.3);
+  opacity: 0.6;
+}
+
+.ball-inner {
+  width: 65px;
+  height: 65px;
+  background: #fdfdfd;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 
+    inset 3px 3px 8px rgba(0,0,0,0.35),
+    inset -3px -3px 8px rgba(255,255,255,0.8),
+    0 4px 6px rgba(0,0,0,0.15);
+  transform: rotate(-5deg);
+}
+
+.ball-number {
+  font-size: 2.25rem;
+  font-weight: 800;
+  color: #1e1b4b; /* Deep Indigo */
+  letter-spacing: -0.05em;
+  text-shadow: 0 1px 1px rgba(255,255,255,0.8);
+}
+
+.stat-box {
+  background: rgba(15, 23, 42, 0.4);
+  padding: 1.5rem;
+  border-radius: 1.5rem;
+  text-align: center;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+input[type="text"], input[type="number"] {
+  background: rgba(15, 23, 42, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: white;
+  padding: 1rem;
+  border-radius: 1.25rem;
+  font-size: 1.125rem;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+input:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.2);
+}
+
+.win-banner {
+  background: linear-gradient(to right, #10b981, #059669);
+  color: white;
+  padding: 1.25rem;
+  border-radius: 1.25rem;
+  margin-bottom: 1.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  animation: slideDown 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+@keyframes slideDown {
+  from { transform: translateY(-20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+/* Admin Dashboard styling */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+
+.winners-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.winner-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(16, 185, 129, 0.2);
+  padding: 0.75rem 1rem;
+  border-radius: 1rem;
+}
+
+/* Called Numbers styling */
+.called-numbers-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: center;
+  margin-top: 1rem;
+  min-height: 120px; /* Pre-allocate space for 3 rows of called numbers */
+  align-content: flex-start;
+}
+
+.called-number-dot {
+  width: 2.25rem;
+  height: 2.25rem;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-main);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  font-size: 0.875rem;
+  font-weight: 800;
+  transition: all 0.3s ease;
+}
+
+.called-number-dot.uncalled {
+  opacity: 0.15;
+}
+
+.called-number-dot.called {
+  background: rgba(99, 102, 241, 0.4);
+  border-color: rgba(99, 102, 241, 0.8);
+  box-shadow: 0 0 8px rgba(99, 102, 241, 0.3);
+  color: white;
+  opacity: 1;
+}
+
+.called-number-dot.last-called {
+  background: linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%);
+  color: white;
+  border: none;
+  box-shadow: 0 0 15px rgba(99, 102, 241, 0.5);
+  transform: scale(1.15);
+  opacity: 1;
+}
+
+/* Mobile Responsiveness Improvements */
+@media (max-width: 480px) {
+  .app-container {
+    padding: 0.75rem 0.5rem;
+  }
+
+  .card {
+    padding: 1rem;
+    border-radius: 1.5rem;
+    margin-bottom: 0.75rem;
+  }
+
+  h1 {
+    font-size: 1.8rem;
+  }
+
+  h2 {
+    font-size: 1.35rem;
+  }
+
+  h3 {
+    font-size: 1.15rem;
+  }
+
+  button {
+    padding: 0.6rem 1.1rem;
+    font-size: 0.95rem;
+    border-radius: 0.875rem;
+  }
+
+  input[type="text"], input[type="number"] {
+    padding: 0.6rem 0.875rem;
+    font-size: 0.95rem;
+    border-radius: 0.875rem;
+  }
+
+  .bingo-grid {
+    gap: 8px;
+    margin: 0.75rem 0;
+  }
+
+  .bingo-cell {
+    font-size: 2.2rem; /* Larger font size on mobile from the start */
+    border-radius: 0.875rem;
+  }
+
+  .bingo-ball {
+    width: 90px;
+    height: 90px;
+  }
+  
+  .ball-inner {
+    width: 50px;
+    height: 50px;
+  }
+  
+  .ball-number {
+    font-size: 1.75rem;
+  }
+  
+  .called-number-display-wrapper {
+    margin: 0.25rem 0;
+  }
+  
+  .called-numbers-list {
+    gap: 0.35rem;
+    margin-top: 0.5rem;
+    min-height: 90px; /* Pre-allocate height on mobile */
+    align-content: flex-start;
+  }
+  
+  .called-number-dot {
+    width: 2rem;
+    height: 2rem;
+    font-size: 0.8rem;
+  }
+
+  .called-number-dot.last-called {
+    transform: scale(1.1);
+  }
+
+  .stats-grid {
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+  }
+  
+  .stat-box {
+    padding: 0.75rem;
+    border-radius: 0.875rem;
+  }
+}
+
+/* Presenter Mode (Full Screen View) */
+.presenter-mode {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: var(--background);
+  background-image: 
+    radial-gradient(at 10% 10%, rgba(236, 72, 153, 0.3) 0px, transparent 50%),
+    radial-gradient(at 90% 90%, rgba(99, 102, 241, 0.25) 0px, transparent 50%),
+    radial-gradient(at 50% 50%, rgba(168, 85, 247, 0.2) 0px, transparent 70%);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  z-index: 9999;
+  user-select: none;
+}
+
+.presenter-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2rem;
+  width: 100%;
+  max-width: 600px;
+  text-align: center;
+}
+
+.stage-indicator {
+  font-size: 2rem;
+  font-weight: 800;
+  background: linear-gradient(to right, #fff, var(--primary), var(--accent));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  padding: 0 1rem;
+  animation: pulse 2s infinite ease-in-out;
+}
+
+.presenter-ball-wrapper {
+  cursor: pointer;
+  transform: scale(2.5);
+  margin: 8rem 0;
+  transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.presenter-ball-wrapper:hover {
+  transform: scale(2.65);
+}
+
+.presenter-ball-wrapper:active {
+  transform: scale(2.4);
+}
+
+.presenter-hint {
+  font-size: 1.25rem;
+  color: var(--text-muted);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  margin-top: 1rem;
+  animation: pulse-opacity 2s infinite ease-in-out;
+}
+
+.exit-btn {
+  position: absolute;
+  top: 1.5rem;
+  right: 1.5rem;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  padding: 0.75rem 1.25rem;
+  font-size: 1rem;
+  border-radius: 1rem;
+  box-shadow: none;
+}
+
+.exit-btn:hover {
+  background: var(--danger);
+  border-color: transparent;
+  transform: translateY(-1px);
+}
+
+@keyframes pulse {
+  0%, 100% { transform: scale(1); opacity: 0.9; }
+  50% { transform: scale(1.03); opacity: 1; }
+}
+
+@keyframes pulse-opacity {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 0.9; }
+}
+
+/* Adjust giant ball number font size */
+.bingo-ball.giant {
+  width: 150px;
+  height: 150px;
+  background: radial-gradient(circle at 35% 35%, var(--primary), #be185d 60%, #500724);
+  box-shadow: 
+    inset -15px -15px 30px rgba(0, 0, 0, 0.6),
+    inset 15px 15px 30px rgba(255, 255, 255, 0.25),
+    0 25px 45px rgba(0, 0, 0, 0.6),
+    0 0 50px rgba(236, 72, 153, 0.5);
+}
+.bingo-ball.giant .ball-inner {
+  width: 85px;
+  height: 85px;
+}
+.bingo-ball.giant .ball-number {
+  font-size: 3rem;
+}
+
+/* Win Announcement Overlay */
+.win-announcement-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(13, 5, 38, 0.95);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  z-index: 10000;
+  animation: fadeIn 0.4s ease-out;
+  padding: 2rem;
+  text-align: center;
+}
+
+.win-announcement-card {
+  background: linear-gradient(135deg, rgba(236, 72, 153, 0.15) 0%, rgba(168, 85, 247, 0.15) 100%);
+  border: 3px solid var(--primary);
+  box-shadow: 
+    0 0 50px rgba(236, 72, 153, 0.5),
+    inset 0 0 20px rgba(236, 72, 153, 0.2);
+  border-radius: 3rem;
+  padding: 3rem;
+  max-width: 600px;
+  width: 100%;
+  animation: popIn 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+.win-announcement-title {
+  font-size: 3.5rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  margin: 0;
+  background: linear-gradient(135deg, #fff 0%, #f472b6 50%, #c084fc 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: pulse 1.5s infinite ease-in-out;
+  filter: drop-shadow(0 0 10px rgba(236, 72, 153, 0.3));
+}
+
+.win-announcement-subtitle {
+  font-size: 1.5rem;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+.win-announcement-players {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin: 1rem 0;
+}
+
+.win-announcement-player {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  font-size: 1.25rem;
+  padding: 0.75rem 2rem;
+  border-radius: 1.5rem;
+  font-weight: 800;
+  color: var(--success);
+  box-shadow: 0 0 15px rgba(16, 185, 129, 0.2);
+}
+
+.win-announcement-close-btn {
+  background: linear-gradient(135deg, var(--success) 0%, #047857 100%);
+  box-shadow: 0 10px 20px -3px rgba(16, 185, 129, 0.3);
+  padding: 1.25rem 2.5rem;
+  font-size: 1.25rem;
+  border-radius: 1.5rem;
+  margin-top: 1rem;
+}
+
+.win-announcement-close-btn:hover {
+  box-shadow: 0 15px 25px -3px rgba(16, 185, 129, 0.5);
+  transform: translateY(-2px) scale(1.03);
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes popIn {
+  from { transform: scale(0.6); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
