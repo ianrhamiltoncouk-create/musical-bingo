@@ -252,30 +252,50 @@ app.post('/api/branding', async (req, res) => {
 
 // Create a new game room with default playlist
 app.post('/api/game/create', async (req, res) => {
-  const { gameType, gameMode } = req.body;
+  const { gameType, gameMode, licenseKey, deviceId } = req.body;
   const db = getDb();
-  const newGameId = uuidv4();
-  const roomCode = await generateUniqueRoomCode(db);
-  
-  const type = gameType || 'MUSIC';
-  const mode = gameMode || 'SINGLE_WINNER';
-  const playlistJson = type === 'MUSIC' ? JSON.stringify(DEFAULT_PLAYLIST) : null;
-  
-  let anchors = null;
-  if (type === 'NUMERIC' && mode === 'PARTY_CLIMAX') {
-    const selected = [];
-    const maxNumber = 90;
-    while (selected.length < 3) {
-      const id = Math.floor(Math.random() * maxNumber) + 1;
-      if (!selected.includes(id)) selected.push(id);
-    }
-    anchors = JSON.stringify(selected);
+
+  // Validate license
+  if (!licenseKey || !deviceId) {
+    return res.status(400).json({ error: 'LICENSE_REQUIRED', message: 'A license key and device ID are required to host games.' });
   }
-  
+
   try {
+    const license = await db.get('SELECT * FROM licenses WHERE license_key = ?', [licenseKey.trim()]);
+    if (!license) {
+      return res.status(403).json({ error: 'INVALID_KEY', message: 'Invalid license key.' });
+    }
+    if (license.status !== 'ACTIVE') {
+      return res.status(403).json({ error: 'SUSPENDED', message: 'This license has been suspended.' });
+    }
+    if (license.expires_at && new Date(license.expires_at) < new Date()) {
+      return res.status(403).json({ error: 'EXPIRED', message: 'This license has expired.' });
+    }
+    if (license.device_id_1 !== deviceId && license.device_id_2 !== deviceId) {
+      return res.status(403).json({ error: 'DEVICE_LOCKED', message: 'This license is locked to other devices.' });
+    }
+
+    const newGameId = uuidv4();
+    const roomCode = await generateUniqueRoomCode(db);
+    
+    const type = gameType || 'MUSIC';
+    const mode = gameMode || 'SINGLE_WINNER';
+    const playlistJson = type === 'MUSIC' ? JSON.stringify(DEFAULT_PLAYLIST) : null;
+    
+    let anchors = null;
+    if (type === 'NUMERIC' && mode === 'PARTY_CLIMAX') {
+      const selected = [];
+      const maxNumber = 90;
+      while (selected.length < 3) {
+        const id = Math.floor(Math.random() * maxNumber) + 1;
+        if (!selected.includes(id)) selected.push(id);
+      }
+      anchors = JSON.stringify(selected);
+    }
+    
     await db.run(
-      'INSERT INTO games (id, status, room_code, playlist, game_type, game_mode, finale_numbers) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [newGameId, 'WAITING', roomCode, playlistJson, type, mode, anchors]
+      'INSERT INTO games (id, status, room_code, playlist, game_type, game_mode, finale_numbers, license_key) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [newGameId, 'WAITING', roomCode, playlistJson, type, mode, anchors, license.license_key]
     );
     const game = await db.get('SELECT * FROM games WHERE id = ?', [newGameId]);
     res.json(game);
@@ -971,6 +991,151 @@ async function callNumberHelper(gameId, number, io) {
   socket.on('disconnect', () => {
     console.log('User disconnected');
   });
+});
+
+// License verification
+app.post('/api/license/verify', async (req, res) => {
+  const { licenseKey, deviceId } = req.body;
+  if (!licenseKey || !deviceId) {
+    return res.status(400).json({ error: 'licenseKey and deviceId are required' });
+  }
+
+  try {
+    const db = getDb();
+    const license = await db.get('SELECT * FROM licenses WHERE license_key = ?', [licenseKey.trim()]);
+    
+    if (!license) {
+      return res.json({ success: false, error: 'INVALID_KEY', message: 'Invalid license key. Please check spelling.' });
+    }
+
+    if (license.status !== 'ACTIVE') {
+      return res.json({ success: false, error: 'SUSPENDED', message: 'This license has been suspended.' });
+    }
+
+    if (license.expires_at && new Date(license.expires_at) < new Date()) {
+      return res.json({ success: false, error: 'EXPIRED', message: 'This license subscription has expired.' });
+    }
+
+    // Check device binding
+    if (license.device_id_1 === deviceId || license.device_id_2 === deviceId) {
+      return res.json({ success: true, venueName: license.venue_name, expiresAt: license.expires_at });
+    }
+
+    // Auto-register primary device if empty
+    if (!license.device_id_1) {
+      await db.run('UPDATE licenses SET device_id_1 = ? WHERE license_key = ?', [deviceId, license.license_key]);
+      return res.json({ success: true, venueName: license.venue_name, expiresAt: license.expires_at });
+    }
+
+    // Auto-register backup device if empty
+    if (!license.device_id_2) {
+      await db.run('UPDATE licenses SET device_id_2 = ? WHERE license_key = ?', [deviceId, license.license_key]);
+      return res.json({ success: true, venueName: license.venue_name, expiresAt: license.expires_at });
+    }
+
+    // Both device slots filled and current device doesn't match
+    return res.json({ 
+      success: false, 
+      error: 'DEVICE_LOCKED', 
+      message: 'This license is locked to other laptops. You must reset/transfer it.',
+      deviceLastReset: license.device_last_reset 
+    });
+
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Self-service device transfer / reset
+app.post('/api/license/transfer', async (req, res) => {
+  const { licenseKey, deviceId } = req.body;
+  if (!licenseKey || !deviceId) {
+    return res.status(400).json({ error: 'licenseKey and deviceId are required' });
+  }
+
+  try {
+    const db = getDb();
+    const license = await db.get('SELECT * FROM licenses WHERE license_key = ?', [licenseKey.trim()]);
+
+    if (!license) {
+      return res.json({ success: false, error: 'INVALID_KEY', message: 'Invalid license key.' });
+    }
+
+    // Verify cooldown (30 days)
+    if (license.device_last_reset) {
+      const lastReset = new Date(license.device_last_reset).getTime();
+      const diff = Date.now() - lastReset;
+      const cooldownMs = 30 * 24 * 60 * 60 * 1000;
+      if (diff < cooldownMs) {
+        const remainingDays = Math.ceil((cooldownMs - diff) / (24 * 60 * 60 * 1000));
+        return res.json({ 
+          success: false, 
+          error: 'COOLDOWN', 
+          message: `Device transfer limit reached. You can transfer again in ${remainingDays} days.` 
+        });
+      }
+    }
+
+    // Set device_id_1 as the new device, clear device_id_2, and update last reset timestamp
+    await db.run(
+      'UPDATE licenses SET device_id_1 = ?, device_id_2 = NULL, device_last_reset = datetime(\'now\') WHERE license_key = ?', 
+      [deviceId, license.license_key]
+    );
+
+    res.json({ success: true, venueName: license.venue_name });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Admin-only endpoints to generate licenses and clear device locks
+app.post('/api/admin/licenses/create', async (req, res) => {
+  const { venueName, expiresDays } = req.body;
+  if (!venueName) {
+    return res.status(400).json({ error: 'venueName is required' });
+  }
+
+  try {
+    const db = getDb();
+    // Generate key format: MB-XXXXX-XXXXX
+    const keyPart1 = uuidv4().slice(0, 5).toUpperCase();
+    const keyPart2 = uuidv4().slice(9, 14).toUpperCase();
+    const licenseKey = `MB-${keyPart1}-${keyPart2}`;
+    
+    let expiresAt = null;
+    if (expiresDays) {
+      expiresAt = new Date();
+      expiresAt.setDate(expiresAt.getDate() + Number(expiresDays));
+      expiresAt = expiresAt.toISOString().slice(0, 19).replace('T', ' ');
+    }
+
+    await db.run(
+      'INSERT INTO licenses (license_key, venue_name, expires_at) VALUES (?, ?, ?)',
+      [licenseKey, venueName, expiresAt]
+    );
+
+    res.json({ success: true, licenseKey, venueName, expiresAt });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/admin/licenses/reset', async (req, res) => {
+  const { licenseKey } = req.body;
+  if (!licenseKey) {
+    return res.status(400).json({ error: 'licenseKey required' });
+  }
+
+  try {
+    const db = getDb();
+    await db.run(
+      'UPDATE licenses SET device_id_1 = NULL, device_id_2 = NULL, device_last_reset = NULL WHERE license_key = ?',
+      [licenseKey.trim()]
+    );
+    res.json({ success: true, message: `License ${licenseKey} has been reset successfully.` });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.get('*all', (req, res) => {

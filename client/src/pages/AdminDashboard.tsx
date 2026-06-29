@@ -75,6 +75,20 @@ const AdminDashboard: React.FC = () => {
   const [selectedGameType, setSelectedGameType] = useState<'MUSIC' | 'NUMERIC'>('MUSIC');
   const [selectedGameMode, setSelectedGameMode] = useState<'SINGLE_WINNER' | 'PARTY_CLIMAX'>('SINGLE_WINNER');
 
+  const [licenseVerified, setLicenseVerified] = useState<boolean>(false);
+  const [licenseKeyInput, setLicenseKeyInput] = useState<string>('');
+  const [licenseError, setLicenseError] = useState<string | null>(null);
+  const [licenseInfo, setLicenseInfo] = useState<{ key: string; venueName: string; expiresAt: string | null } | null>(null);
+  const [showTransferPrompt, setShowTransferPrompt] = useState<boolean>(false);
+  const [deviceId] = useState<string>(() => {
+    let devId = localStorage.getItem('bingo_host_device_id');
+    if (!devId) {
+      devId = 'dev-' + Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+      localStorage.setItem('bingo_host_device_id', devId);
+    }
+    return devId;
+  });
+
   // Sync promo image, delay, and playlist from game data
   useEffect(() => {
     if (game) {
@@ -289,6 +303,52 @@ const AdminDashboard: React.FC = () => {
     }
   };
 
+  const verifyLicense = useCallback(async (key: string) => {
+    setLicenseError(null);
+    try {
+      const res = await fetch(`${API_BASE}/api/license/verify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ licenseKey: key, deviceId })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setLicenseVerified(true);
+        setLicenseInfo({ key, venueName: data.venueName, expiresAt: data.expiresAt });
+        localStorage.setItem('bingo_license_key', key);
+        setShowTransferPrompt(false);
+      } else {
+        setLicenseVerified(false);
+        if (data.error === 'DEVICE_LOCKED') {
+          setShowTransferPrompt(true);
+        } else {
+          setLicenseError(data.message || 'Verification failed');
+        }
+      }
+    } catch (err) {
+      setLicenseError('Cannot connect to license server.');
+    }
+  }, [deviceId]);
+
+  const transferLicense = async () => {
+    setLicenseError(null);
+    try {
+      const res = await fetch(`${API_BASE}/api/license/transfer`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ licenseKey: licenseKeyInput, deviceId })
+      });
+      const data = await res.json();
+      if (data.success) {
+        await verifyLicense(licenseKeyInput);
+      } else {
+        setLicenseError(data.message || 'Transfer failed.');
+      }
+    } catch (err) {
+      setLicenseError('Cannot connect to license server.');
+    }
+  };
+
   const fetchGame = useCallback(async (id: string) => {
     try {
       const res = await fetch(`${API_BASE}/api/game?id=${id}`);
@@ -314,13 +374,19 @@ const AdminDashboard: React.FC = () => {
   }, []);
 
   const createRoom = async () => {
+    if (!licenseVerified || !licenseInfo) {
+      alert('You must activate a valid license key first.');
+      return;
+    }
     try {
       const res = await fetch(`${API_BASE}/api/game/create`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           gameType: selectedGameType,
-          gameMode: selectedGameType === 'NUMERIC' ? selectedGameMode : 'SINGLE_WINNER'
+          gameMode: selectedGameType === 'NUMERIC' ? selectedGameMode : 'SINGLE_WINNER',
+          licenseKey: licenseInfo.key,
+          deviceId: deviceId
         })
       });
       if (res.ok) {
@@ -328,6 +394,12 @@ const AdminDashboard: React.FC = () => {
         sessionStorage.setItem('bingo_host_game_id', data.id);
         setGame(data);
         await refreshBranding();
+      } else {
+        const errData = await res.json();
+        alert(`Failed to create room: ${errData.message || errData.error}`);
+        if (res.status === 403) {
+          verifyLicense(licenseInfo.key);
+        }
       }
     } catch (err) {
       console.error('Failed to create room:', err);
@@ -359,6 +431,14 @@ const AdminDashboard: React.FC = () => {
     };
     fetchConfig();
   }, [fetchGame]);
+
+  useEffect(() => {
+    const savedKey = localStorage.getItem('bingo_license_key');
+    if (savedKey) {
+      verifyLicense(savedKey);
+      setLicenseKeyInput(savedKey);
+    }
+  }, [verifyLicense]);
 
   useEffect(() => {
     if (!game?.id) return;
@@ -578,10 +658,170 @@ const AdminDashboard: React.FC = () => {
     return '🚀 STAGE 3: Looking for FULL HOUSE!';
   };
 
+  if (!licenseVerified) {
+    return (
+      <div className="card" style={{ maxWidth: '480px', margin: '6rem auto', textAlign: 'center', padding: '2.5rem', border: '1px solid rgba(255,255,255,0.08)', boxShadow: '0 10px 30px rgba(0,0,0,0.5)' }}>
+        <h1 style={{ marginBottom: '0.75rem', fontWeight: 900, color: 'var(--primary)' }}>Activate License</h1>
+        <p style={{ color: 'var(--text-muted)', marginBottom: '2rem', fontSize: '0.95rem', lineHeight: '1.6' }}>
+          Please enter your venue host license key to access the Musical Bingo dashboard.
+        </p>
+
+        {licenseError && (
+          <div style={{
+            background: 'rgba(239, 68, 68, 0.1)',
+            border: '1px solid rgba(239, 68, 68, 0.3)',
+            borderRadius: '0.75rem',
+            padding: '0.75rem 1rem',
+            color: '#ef4444',
+            fontSize: '0.85rem',
+            fontWeight: 'bold',
+            marginBottom: '1.5rem',
+            textAlign: 'left'
+          }}>
+            ⚠️ {licenseError}
+          </div>
+        )}
+
+        {showTransferPrompt ? (
+          <div style={{
+            background: 'rgba(245, 158, 11, 0.08)',
+            border: '1px solid rgba(245, 158, 11, 0.2)',
+            borderRadius: '1rem',
+            padding: '1.25rem',
+            textAlign: 'left',
+            marginBottom: '1.5rem'
+          }}>
+            <span style={{ fontSize: '0.9rem', fontWeight: 'bold', color: 'var(--warning)', display: 'block', marginBottom: '0.5rem' }}>
+              🔒 License Device Lock
+            </span>
+            <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', lineHeight: '1.5', margin: 0 }}>
+              This license key is already locked to another device (e.g. support laptops). 
+            </p>
+            <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', lineHeight: '1.5', margin: '0.5rem 0 1rem 0' }}>
+              Would you like to transfer the activation to this laptop? 
+              <br/>
+              <strong>Warning:</strong> Device transfers are limited to once every 30 days.
+            </p>
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <button
+                onClick={transferLicense}
+                style={{
+                  flex: 1,
+                  background: 'linear-gradient(135deg, var(--warning) 0%, var(--primary) 100%)',
+                  fontSize: '0.85rem',
+                  fontWeight: 'bold',
+                  margin: 0
+                }}
+              >
+                Yes, Transfer License
+              </button>
+              <button
+                onClick={() => setShowTransferPrompt(false)}
+                style={{
+                  background: 'var(--secondary)',
+                  fontSize: '0.85rem',
+                  fontWeight: 'bold',
+                  margin: 0
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', textAlign: 'left' }}>
+            <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 'bold', color: 'var(--text-muted)' }}>
+              License Key:
+            </label>
+            <input
+              type="text"
+              placeholder="e.g. MB-XXXXX-XXXXX"
+              value={licenseKeyInput}
+              onChange={e => setLicenseKeyInput(e.target.value.toUpperCase())}
+              style={{
+                width: '100%',
+                padding: '0.75rem 1rem',
+                borderRadius: '0.75rem',
+                background: 'rgba(255,255,255,0.05)',
+                border: '1px solid rgba(255,255,255,0.1)',
+                color: 'white',
+                fontSize: '1rem',
+                fontFamily: 'monospace',
+                letterSpacing: '1px'
+              }}
+            />
+            <button
+              onClick={() => verifyLicense(licenseKeyInput)}
+              style={{
+                width: '100%',
+                background: 'linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%)',
+                fontWeight: 'bold',
+                marginTop: '0.5rem'
+              }}
+            >
+              Activate Dashboard
+            </button>
+            <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textAlign: 'center', marginTop: '0.5rem', lineHeight: '1.4' }}>
+              For local testing, you can use the default trial key: 
+              <br/>
+              <span style={{ fontFamily: 'monospace', fontWeight: 'bold', color: 'var(--accent)' }}>MB-TRIAL-12345</span>
+            </p>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   if (!game) {
     return (
       <div className="card" style={{ maxWidth: '500px', margin: '4rem auto', textAlign: 'center', padding: '2.5rem' }}>
         <h1 style={{ marginBottom: '1rem', fontWeight: 900 }}>Bingo Host Panel</h1>
+
+        {licenseInfo && (
+          <div style={{
+            background: 'rgba(255,255,255,0.02)',
+            border: '1px solid rgba(255,255,255,0.05)',
+            borderRadius: '0.75rem',
+            padding: '0.6rem 1rem',
+            marginBottom: '1.5rem',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            fontSize: '0.8rem',
+            textAlign: 'left'
+          }}>
+            <div>
+              <span style={{ display: 'block', fontWeight: 'bold', color: 'var(--success)' }}>
+                ✓ License Activated
+              </span>
+              <span style={{ color: 'var(--text-muted)' }}>
+                Venue: <strong>{licenseInfo.venueName}</strong>
+              </span>
+            </div>
+            <button
+              onClick={() => {
+                localStorage.removeItem('bingo_license_key');
+                setLicenseVerified(false);
+                setLicenseInfo(null);
+              }}
+              style={{
+                background: 'rgba(239, 68, 68, 0.1)',
+                color: '#ef4444',
+                fontSize: '0.7rem',
+                padding: '0.25rem 0.5rem',
+                border: '1px solid rgba(239, 68, 68, 0.2)',
+                borderRadius: '0.35rem',
+                height: 'auto',
+                width: 'auto',
+                boxShadow: 'none',
+                margin: 0
+              }}
+            >
+              Change Key
+            </button>
+          </div>
+        )}
+
         <p style={{ color: 'var(--text-muted)', marginBottom: '2rem', fontSize: '1.05rem', lineHeight: '1.6' }}>
           Create a private bingo room instantly. Customize branding, show a real-time caller display, and manage winners.
         </p>

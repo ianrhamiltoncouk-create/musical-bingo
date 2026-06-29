@@ -47,6 +47,17 @@ async function initDb() {
       PRIMARY KEY (game_id, number),
       FOREIGN KEY (game_id) REFERENCES games(id)
     );
+
+    CREATE TABLE IF NOT EXISTS licenses (
+      license_key TEXT PRIMARY KEY,
+      venue_name TEXT,
+      status TEXT DEFAULT 'ACTIVE', -- ACTIVE, SUSPENDED
+      expires_at DATETIME,
+      device_id_1 TEXT,
+      device_id_2 TEXT,
+      device_last_reset DATETIME,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
   `);
 
   // Safe migration to add columns if database exists from before
@@ -110,9 +121,22 @@ async function initDb() {
   try {
     await db.exec(`ALTER TABLE games ADD COLUMN game_mode TEXT DEFAULT 'SINGLE_WINNER';`);
   } catch (e) {}
+  try {
+    await db.exec(`ALTER TABLE games ADD COLUMN license_key TEXT;`);
+  } catch (e) {}
 
-
-
+  // Seed a default trial license key for testing
+  try {
+    const trialLicense = await db.get('SELECT * FROM licenses WHERE license_key = ?', ['MB-TRIAL-12345']);
+    if (!trialLicense) {
+      await db.run(
+        'INSERT INTO licenses (license_key, venue_name, expires_at) VALUES (?, ?, ?)',
+        ['MB-TRIAL-12345', 'Local Development Venue', null]
+      );
+    }
+  } catch (e) {
+    console.error('Failed to seed default trial license:', e);
+  }
 
   return db;
 }
