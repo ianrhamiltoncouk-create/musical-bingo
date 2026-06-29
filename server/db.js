@@ -7,7 +7,7 @@ let db;
 
 async function initDb() {
   db = await open({
-    filename: path.join(__dirname, 'database.sqlite'),
+    filename: process.env.DATABASE_PATH || path.join(__dirname, 'database.sqlite'),
     driver: sqlite3.Database
   });
 
