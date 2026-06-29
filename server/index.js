@@ -5,7 +5,7 @@ const cors = require('cors');
 const { v4: uuidv4 } = require('uuid');
 const os = require('os');
 const { initDb, getDb } = require('./db');
-const { generateMusicalCard, checkWin } = require('./bingoLogic');
+const { generateMusicalCard, generatePartyClimaxCard, checkWin } = require('./bingoLogic');
 const { exec } = require('child_process');
 
 const app = express();
@@ -252,15 +252,30 @@ app.post('/api/branding', async (req, res) => {
 
 // Create a new game room with default playlist
 app.post('/api/game/create', async (req, res) => {
+  const { gameType, gameMode } = req.body;
   const db = getDb();
   const newGameId = uuidv4();
   const roomCode = await generateUniqueRoomCode(db);
-  const playlistJson = JSON.stringify(DEFAULT_PLAYLIST);
+  
+  const type = gameType || 'MUSIC';
+  const mode = gameMode || 'SINGLE_WINNER';
+  const playlistJson = type === 'MUSIC' ? JSON.stringify(DEFAULT_PLAYLIST) : null;
+  
+  let anchors = null;
+  if (type === 'NUMERIC' && mode === 'PARTY_CLIMAX') {
+    const selected = [];
+    const maxNumber = 90;
+    while (selected.length < 3) {
+      const id = Math.floor(Math.random() * maxNumber) + 1;
+      if (!selected.includes(id)) selected.push(id);
+    }
+    anchors = JSON.stringify(selected);
+  }
   
   try {
     await db.run(
-      'INSERT INTO games (id, status, room_code, playlist) VALUES (?, ?, ?, ?)',
-      [newGameId, 'WAITING', roomCode, playlistJson]
+      'INSERT INTO games (id, status, room_code, playlist, game_type, game_mode, finale_numbers) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [newGameId, 'WAITING', roomCode, playlistJson, type, mode, anchors]
     );
     const game = await db.get('SELECT * FROM games WHERE id = ?', [newGameId]);
     res.json(game);
@@ -329,7 +344,18 @@ app.post('/api/game/reset', async (req, res) => {
   await db.run('DELETE FROM called_numbers WHERE game_id = ?', [gameId]);
   await db.run('DELETE FROM players WHERE game_id = ?', [gameId]);
   
-  await db.run('UPDATE games SET status = ?, winner_player_id = NULL WHERE id = ?', ['WAITING', gameId]);
+  let anchors = null;
+  if (game.game_type === 'NUMERIC' && game.game_mode === 'PARTY_CLIMAX') {
+    const selected = [];
+    const maxNumber = 90;
+    while (selected.length < 3) {
+      const id = Math.floor(Math.random() * maxNumber) + 1;
+      if (!selected.includes(id)) selected.push(id);
+    }
+    anchors = JSON.stringify(selected);
+  }
+  
+  await db.run('UPDATE games SET status = ?, winner_player_id = NULL, finale_numbers = ? WHERE id = ?', ['WAITING', anchors, gameId]);
   
   io.to(gameId).emit('GAME_RESET', { gameId });
   res.json({ success: true, id: gameId, roomCode: game.room_code });
@@ -539,8 +565,18 @@ app.post('/api/game/join', async (req, res) => {
   const playlist = JSON.parse(game.playlist || '[]');
   const playlistSize = playlist.length || 50;
   
-  // Generate 3x3 musical card populated with unique song IDs (1 to playlistSize)
-  const card = generateMusicalCard(playlistSize);
+  // Generate 3x3 card depending on game type and mode
+  let card;
+  if (game.game_type === 'NUMERIC') {
+    if (game.game_mode === 'PARTY_CLIMAX') {
+      const anchors = JSON.parse(game.finale_numbers || '[]');
+      card = generatePartyClimaxCard(90, anchors);
+    } else {
+      card = generateMusicalCard(90);
+    }
+  } else {
+    card = generateMusicalCard(playlistSize);
+  }
   const sessionToken = uuidv4();
 
   await db.run(
@@ -726,15 +762,29 @@ io.on('connection', (socket) => {
     if (!game) return;
 
     const playlist = JSON.parse(game.playlist || '[]');
-    const playlistSize = playlist.length || 50;
+    const maxRange = game.game_type === 'NUMERIC' ? 90 : (playlist.length || 50);
 
     const alreadyCalledList = await db.all('SELECT number FROM called_numbers WHERE game_id = ?', [gameId]);
     const alreadyCalled = new Set(alreadyCalledList.map(c => c.number));
 
+    // If Party Climax, exclude all 3 anchors from auto-calling suggestions
+    if (game.game_type === 'NUMERIC' && game.game_mode === 'PARTY_CLIMAX') {
+      const anchors = JSON.parse(game.finale_numbers || '[]');
+      const uncalled = [];
+      for (let i = 1; i <= maxRange; i++) {
+        if (!alreadyCalled.has(i) && !anchors.includes(i)) {
+          uncalled.push(i);
+        }
+      }
+      const suggestion = uncalled.length > 0 ? uncalled[Math.floor(Math.random() * uncalled.length)] : 1;
+      socket.emit('AUTO_NUMBER_SUGGESTION', { number: suggestion });
+      return;
+    }
+
     const players = await db.all('SELECT * FROM players WHERE game_id = ?', [gameId]);
     if (players.length === 0) {
       const uncalled = [];
-      for (let i = 1; i <= playlistSize; i++) {
+      for (let i = 1; i <= maxRange; i++) {
         if (!alreadyCalled.has(i)) uncalled.push(i);
       }
       const suggestion = uncalled.length > 0 ? uncalled[Math.floor(Math.random() * uncalled.length)] : 1;
@@ -797,7 +847,7 @@ io.on('connection', (socket) => {
         suggestion = winnerRemaining[Math.floor(Math.random() * winnerRemaining.length)];
       } else {
         const uncalled = [];
-        for (let i = 1; i <= playlistSize; i++) {
+        for (let i = 1; i <= maxRange; i++) {
           if (!alreadyCalled.has(i)) uncalled.push(i);
         }
         suggestion = uncalled.length > 0 ? uncalled[Math.floor(Math.random() * uncalled.length)] : 1;
@@ -807,77 +857,99 @@ io.on('connection', (socket) => {
     socket.emit('AUTO_NUMBER_SUGGESTION', { number: suggestion });
   });
 
-  socket.on('ADMIN_CALL_NUMBER', async (data) => {
-    const { gameId, number } = data;
-    if (!gameId) return;
-    const db = getDb();
-    
-    try {
-      const game = await db.get('SELECT * FROM games WHERE id = ?', [gameId]);
-      if (!game) return;
+async function callNumberHelper(gameId, number, io) {
+  const db = getDb();
+  try {
+    const game = await db.get('SELECT * FROM games WHERE id = ?', [gameId]);
+    if (!game) return;
 
+    if (game.game_type === 'MUSIC') {
       const playlist = JSON.parse(game.playlist || '[]');
       const songItem = playlist[number - 1];
       if (songItem && typeof songItem === 'object' && songItem.uri) {
         playSpotifyTrack(gameId, songItem.uri).catch(err => console.error('[Spotify AutoPlay] Error:', err));
       }
+    }
 
-      await db.run('INSERT INTO called_numbers (game_id, number) VALUES (?, ?)', [gameId, number]);
+    await db.run('INSERT INTO called_numbers (game_id, number) VALUES (?, ?)', [gameId, number]);
+    
+    const called = await db.all('SELECT number FROM called_numbers WHERE game_id = ? ORDER BY called_at ASC', [gameId]);
+    const numbers = called.map(c => c.number);
+
+    io.to(gameId).emit('NUMBER_CALLED', { number, allNumbers: numbers });
+
+    const players = await db.all('SELECT * FROM players WHERE game_id = ?', [gameId]);
+    const winners = [];
+
+    const lineWinAlreadyOccurred = (await db.get('SELECT COUNT(*) as count FROM players WHERE game_id = ? AND has_line_win >= 1', [gameId])).count > 0;
+    const twoLinesWinAlreadyOccurred = (await db.get('SELECT COUNT(*) as count FROM players WHERE game_id = ? AND has_line_win = 2', [gameId])).count > 0;
+    
+    let lineWinOccurred = lineWinAlreadyOccurred;
+    let gameFinished = false;
+
+    for (const player of players) {
+      const card = JSON.parse(player.card_data);
+      const winState = checkWin(card, numbers);
       
-      const called = await db.all('SELECT number FROM called_numbers WHERE game_id = ? ORDER BY called_at ASC', [gameId]);
-      const numbers = called.map(c => c.number);
-
-      io.to(gameId).emit('NUMBER_CALLED', { number, allNumbers: numbers });
-
-      const players = await db.all('SELECT * FROM players WHERE game_id = ?', [gameId]);
-      const winners = [];
-
-      const lineWinAlreadyOccurred = (await db.get('SELECT COUNT(*) as count FROM players WHERE game_id = ? AND has_line_win >= 1', [gameId])).count > 0;
-      const twoLinesWinAlreadyOccurred = (await db.get('SELECT COUNT(*) as count FROM players WHERE game_id = ? AND has_line_win = 2', [gameId])).count > 0;
+      if (winState.hasFullHouse && !player.has_full_house) {
+        await db.run('UPDATE players SET has_full_house = 1 WHERE id = ?', [player.id]);
+        winners.push({ id: player.id, name: player.name, type: 'FULL_HOUSE' });
+        gameFinished = true;
+      } 
       
-      let lineWinOccurred = lineWinAlreadyOccurred;
-      let gameFinished = false;
-
-      for (const player of players) {
-        const card = JSON.parse(player.card_data);
-        const winState = checkWin(card, numbers);
-        
-        if (winState.hasFullHouse && !player.has_full_house) {
-          await db.run('UPDATE players SET has_full_house = 1 WHERE id = ?', [player.id]);
-          winners.push({ id: player.id, name: player.name, type: 'FULL_HOUSE' });
-          gameFinished = true;
-        } 
-        
-        if (!lineWinAlreadyOccurred && winState.hasLine && !player.has_line_win) {
-          await db.run('UPDATE players SET has_line_win = 1 WHERE id = ?', [player.id]);
-          winners.push({ id: player.id, name: player.name, type: 'LINE' });
-          lineWinOccurred = true;
-        } 
-        
-        if (!twoLinesWinAlreadyOccurred && lineWinOccurred && winState.hasTwoLines && player.has_line_win !== 2) {
-          await db.run('UPDATE players SET has_line_win = 2 WHERE id = ?', [player.id]);
-          winners.push({ id: player.id, name: player.name, type: 'TWO_LINES' });
-        }
+      if (!lineWinAlreadyOccurred && winState.hasLine && !player.has_line_win) {
+        await db.run('UPDATE players SET has_line_win = 1 WHERE id = ?', [player.id]);
+        winners.push({ id: player.id, name: player.name, type: 'LINE' });
+        lineWinOccurred = true;
+      } 
+      
+      if (!twoLinesWinAlreadyOccurred && lineWinOccurred && winState.hasTwoLines && player.has_line_win !== 2) {
+        await db.run('UPDATE players SET has_line_win = 2 WHERE id = ?', [player.id]);
+        winners.push({ id: player.id, name: player.name, type: 'TWO_LINES' });
       }
+    }
 
-      if (winners.length > 0) {
-        io.to(gameId).emit('WINNERS_UPDATE', { winners });
-      }
+    if (winners.length > 0) {
+      io.to(gameId).emit('WINNERS_UPDATE', { winners });
+    }
 
-      if (gameFinished) {
-        await db.run('UPDATE games SET status = ? WHERE id = ?', ['FINISHED', gameId]);
-        const updatedGame = await db.get('SELECT redirect_url, redirect_delay, auto_redirect_enabled, promo_image, promo_image_delay FROM games WHERE id = ?', [gameId]);
-        io.to(gameId).emit('GAME_FINISHED', { 
-          redirectUrl: updatedGame?.redirect_url,
-          redirectDelay: updatedGame?.redirect_delay,
-          autoRedirectEnabled: updatedGame?.auto_redirect_enabled,
-          promoImage: updatedGame?.promo_image,
-          promoImageDelay: updatedGame?.promo_image_delay
-        });
-      }
+    if (gameFinished) {
+      await db.run('UPDATE games SET status = ? WHERE id = ?', ['FINISHED', gameId]);
+      const updatedGame = await db.get('SELECT redirect_url, redirect_delay, auto_redirect_enabled, promo_image, promo_image_delay FROM games WHERE id = ?', [gameId]);
+      io.to(gameId).emit('GAME_FINISHED', { 
+        redirectUrl: updatedGame?.redirect_url,
+        redirectDelay: updatedGame?.redirect_delay,
+        autoRedirectEnabled: updatedGame?.auto_redirect_enabled,
+        promoImage: updatedGame?.promo_image,
+        promoImageDelay: updatedGame?.promo_image_delay
+      });
+    }
 
-    } catch (e) {
-      console.error("Error calling number:", e);
+  } catch (e) {
+    console.error("Error calling number helper:", e);
+  }
+}
+
+  socket.on('ADMIN_CALL_NUMBER', async (data) => {
+    const { gameId, number } = data;
+    if (!gameId) return;
+    await callNumberHelper(gameId, number, io);
+  });
+
+  socket.on('ADMIN_TRIGGER_CLIMAX', async (data) => {
+    const { gameId } = data;
+    if (!gameId) return;
+    const db = getDb();
+    const game = await db.get('SELECT * FROM games WHERE id = ?', [gameId]);
+    if (!game || game.game_mode !== 'PARTY_CLIMAX') return;
+
+    const anchors = JSON.parse(game.finale_numbers || '[]');
+    const calledList = await db.all('SELECT number FROM called_numbers WHERE game_id = ?', [gameId]);
+    const calledSet = new Set(calledList.map(c => c.number));
+
+    const nextAnchor = anchors.find(a => !calledSet.has(a));
+    if (nextAnchor) {
+      await callNumberHelper(gameId, nextAnchor, io);
     }
   });
 

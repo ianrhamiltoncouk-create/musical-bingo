@@ -15,6 +15,7 @@ async function initDb() {
     CREATE TABLE IF NOT EXISTS games (
       id TEXT PRIMARY KEY,
       status TEXT DEFAULT 'WAITING', -- WAITING, STARTED, FINALE, FINISHED
+      game_mode TEXT DEFAULT 'SINGLE_WINNER', -- SINGLE_WINNER, PARTY_CLIMAX
       finale_numbers TEXT, -- JSON array
       redirect_url TEXT,
       redirect_delay INTEGER DEFAULT 30,
@@ -105,6 +106,9 @@ async function initDb() {
   } catch (e) {}
   try {
     await db.exec(`ALTER TABLE games ADD COLUMN spotify_playlist_url TEXT;`);
+  } catch (e) {}
+  try {
+    await db.exec(`ALTER TABLE games ADD COLUMN game_mode TEXT DEFAULT 'SINGLE_WINNER';`);
   } catch (e) {}
 
 

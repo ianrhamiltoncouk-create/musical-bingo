@@ -23,6 +23,8 @@ interface Game {
   redirect_delay?: number;
   auto_redirect_enabled?: number;
   room_code?: string;
+  game_type?: 'MUSIC' | 'NUMERIC';
+  game_mode?: 'SINGLE_WINNER' | 'PARTY_CLIMAX';
 }
 
 interface Winner {
@@ -70,6 +72,8 @@ const AdminDashboard: React.FC = () => {
   const [spotifyClientSecret, setSpotifyClientSecret] = useState<string>('');
   const [spotifyPlaylistUrl, setSpotifyPlaylistUrl] = useState<string>('');
   const [spotifyConnected, setSpotifyConnected] = useState<boolean>(false);
+  const [selectedGameType, setSelectedGameType] = useState<'MUSIC' | 'NUMERIC'>('MUSIC');
+  const [selectedGameMode, setSelectedGameMode] = useState<'SINGLE_WINNER' | 'PARTY_CLIMAX'>('SINGLE_WINNER');
 
   // Sync promo image, delay, and playlist from game data
   useEffect(() => {
@@ -312,7 +316,12 @@ const AdminDashboard: React.FC = () => {
   const createRoom = async () => {
     try {
       const res = await fetch(`${API_BASE}/api/game/create`, {
-        method: 'POST'
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          gameType: selectedGameType,
+          gameMode: selectedGameType === 'NUMERIC' ? selectedGameMode : 'SINGLE_WINNER'
+        })
       });
       if (res.ok) {
         const data = await res.json();
@@ -574,8 +583,37 @@ const AdminDashboard: React.FC = () => {
       <div className="card" style={{ maxWidth: '500px', margin: '4rem auto', textAlign: 'center', padding: '2.5rem' }}>
         <h1 style={{ marginBottom: '1rem', fontWeight: 900 }}>Bingo Host Panel</h1>
         <p style={{ color: 'var(--text-muted)', marginBottom: '2rem', fontSize: '1.05rem', lineHeight: '1.6' }}>
-          Create a private bingo room instantly. Customize branding, show a real-time caller display, and manage winners. No registration or accounts required!
+          Create a private bingo room instantly. Customize branding, show a real-time caller display, and manage winners.
         </p>
+
+        {/* Game Type Selection */}
+        <div style={{ textAlign: 'left', marginBottom: '1.25rem' }}>
+          <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>Select Game Type:</label>
+          <select 
+            value={selectedGameType} 
+            onChange={e => setSelectedGameType(e.target.value as any)}
+            style={{ width: '100%', padding: '0.75rem', borderRadius: '0.5rem', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'white', cursor: 'pointer' }}
+          >
+            <option value="MUSIC" style={{ background: '#1c1b22' }}>🎵 Musical Bingo (Playlists / Songs)</option>
+            <option value="NUMERIC" style={{ background: '#1c1b22' }}>🔢 Classic Numeric Bingo (Numbers 1-90)</option>
+          </select>
+        </div>
+
+        {/* Game Mode Selection (Numeric only) */}
+        {selectedGameType === 'NUMERIC' && (
+          <div style={{ textAlign: 'left', marginBottom: '2rem' }}>
+            <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>Select Winning Mode:</label>
+            <select 
+              value={selectedGameMode} 
+              onChange={e => setSelectedGameMode(e.target.value as any)}
+              style={{ width: '100%', padding: '0.75rem', borderRadius: '0.5rem', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'white', cursor: 'pointer' }}
+            >
+              <option value="SINGLE_WINNER" style={{ background: '#1c1b22' }}>🎯 Classic (Single winner target)</option>
+              <option value="PARTY_CLIMAX" style={{ background: '#1c1b22' }}>🎭 Comedy Climax (Everyone wins unison)</option>
+            </select>
+          </div>
+        )}
+
         <button 
           onClick={createRoom} 
           style={{ 
@@ -669,7 +707,7 @@ const AdminDashboard: React.FC = () => {
             </div>
             
             <div className="presenter-ball-wrapper" onClick={autoCallNext}>
-              <div key={lastCalled} className={`bingo-ball giant ${(lastCalled && playlist[lastCalled - 1]) ? 'active' : 'idle'}`} style={{ 
+              <div key={lastCalled} className={`bingo-ball giant ${(lastCalled && (game.game_type === 'NUMERIC' || playlist[lastCalled - 1])) ? 'active' : 'idle'}`} style={{ 
                 borderRadius: '2.5rem', 
                 width: 'auto', 
                 minWidth: '380px', 
@@ -689,14 +727,20 @@ const AdminDashboard: React.FC = () => {
                   justifyContent: 'center',
                   gap: '0.5rem'
                 }}>
-                  <span style={{ fontSize: '1rem', textTransform: 'uppercase', opacity: 0.6, letterSpacing: '4px', fontWeight: 800 }}>Now Playing</span>
+                  <span style={{ fontSize: '1rem', textTransform: 'uppercase', opacity: 0.6, letterSpacing: '4px', fontWeight: 800 }}>
+                    {game.game_type === 'NUMERIC' ? 'Called Number' : 'Now Playing'}
+                  </span>
                   <span className="ball-number" style={{ 
-                    fontSize: '2rem', 
+                    fontSize: game.game_type === 'NUMERIC' ? '5rem' : '2.25rem', 
                     whiteSpace: 'normal', 
                     wordBreak: 'break-word',
                     lineHeight: '1.3'
                   }}>
-                    {(lastCalled && (typeof playlist[lastCalled - 1] === 'object' && playlist[lastCalled - 1] !== null ? (playlist[lastCalled - 1] as any).name : playlist[lastCalled - 1])) || 'Waiting...'}
+                    {lastCalled 
+                      ? (game.game_type === 'NUMERIC' 
+                          ? lastCalled 
+                          : (typeof playlist[lastCalled - 1] === 'object' && playlist[lastCalled - 1] !== null ? (playlist[lastCalled - 1] as any).name : playlist[lastCalled - 1])) 
+                      : 'Waiting...'}
                   </span>
                 </span>
               </div>
@@ -1086,257 +1130,374 @@ const AdminDashboard: React.FC = () => {
                   </button>
                 </div>
               )}
-
-              <div style={{
-                background: 'rgba(255,255,255,0.02)',
-                border: '1px dashed rgba(255,255,255,0.1)',
-                padding: '1.25rem',
-                borderRadius: '1rem',
-                marginBottom: '1.25rem',
-                textAlign: 'left'
-              }}>
-                <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>
-                  🎵 Play Mode Options:
-                </label>
-                
-                {/* Spotify Desktop Sync Option */}
-                <div style={{ 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  justifyContent: 'space-between', 
-                  padding: '0.75rem', 
-                  background: 'rgba(29, 185, 84, 0.08)', 
-                  border: '1px solid rgba(29, 185, 84, 0.2)', 
-                  borderRadius: '0.75rem',
-                  marginBottom: '1rem'
+              {game.game_type === 'NUMERIC' ? (
+                <div style={{
+                  background: 'rgba(255,255,255,0.02)',
+                  border: '1px solid rgba(255,255,255,0.08)',
+                  padding: '1.25rem',
+                  borderRadius: '1rem',
+                  marginBottom: '1.25rem',
+                  textAlign: 'center'
                 }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
-                    <span style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#1db954', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                      🟢 Spotify Desktop Sync
-                    </span>
-                    <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-                      Auto-call songs playing on your local Windows Spotify app!
-                    </span>
-                  </div>
-                  <input 
-                    type="checkbox"
-                    checked={spotifySyncEnabled}
-                    onChange={toggleSpotifySync}
-                    style={{ width: '20px', height: '20px', cursor: 'pointer', accentColor: '#1db954' }}
-                    disabled={game?.status !== 'STARTED'}
-                    title={game?.status !== 'STARTED' ? 'Start the game first to enable Spotify Sync' : 'Toggle Spotify Sync'}
-                  />
-                </div>
-                {audioFiles.length > 0 ? (
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: '0.8rem', color: 'var(--success)', fontWeight: 'bold' }}>
-                      ✅ {audioFiles.length} Audio Tracks Loaded
-                    </span>
+                  <h3>🔢 Number Caller Board (1-90)</h3>
+                  
+                  {/* Climax Button if Comedy Climax */}
+                  {game.game_mode === 'PARTY_CLIMAX' && (
+                    <div style={{
+                      background: 'rgba(236, 72, 153, 0.05)',
+                      border: '1px solid rgba(236, 72, 153, 0.15)',
+                      padding: '1.25rem',
+                      borderRadius: '1rem',
+                      marginBottom: '1.25rem',
+                      textAlign: 'center',
+                      marginTop: '1rem'
+                    }}>
+                      <span style={{ fontSize: '0.85rem', fontWeight: 'bold', color: 'var(--primary)', display: 'block', marginBottom: '0.5rem' }}>
+                        🎭 Comedy Climax Mode Active
+                      </span>
+                      <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>
+                        When you are ready for everyone to win, click the button below to call the climax numbers in unison.
+                      </p>
+                      <button
+                        onClick={() => {
+                          socket.emit('ADMIN_TRIGGER_CLIMAX', { gameId: game.id });
+                        }}
+                        disabled={game.status !== 'STARTED' || isCallingPaused}
+                        style={{
+                          background: 'linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%)',
+                          fontSize: '1rem',
+                          fontWeight: 'bold',
+                          width: '100%',
+                          boxShadow: '0 0 15px rgba(236, 72, 153, 0.3)',
+                          margin: 0
+                        }}
+                      >
+                        🎉 Trigger Next Climax Number
+                      </button>
+                    </div>
+                  )}
+
+                  <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.25rem', marginTop: '1rem' }}>
                     <button 
-                      onClick={() => {
-                        setAudioFiles([]);
-                        if (audioRef.current) {
-                          audioRef.current.pause();
-                        }
-                        setIsPlaying(false);
-                        setCurrentPlayingId(null);
-                      }}
-                      style={{ background: 'var(--danger)', fontSize: '0.75rem', padding: '0.25rem 0.75rem', height: 'auto', width: 'auto', boxShadow: 'none' }}
-                    >
-                      Clear Tracks
-                    </button>
-                  </div>
-                ) : (
-                  <div>
-                    <input 
-                      type="file" 
-                      multiple 
-                      accept="audio/*" 
-                      onChange={handleAudioFilesChange}
-                      id="audio-selector"
-                      style={{ display: 'none' }}
-                    />
-                    <label 
-                      htmlFor="audio-selector" 
-                      className="button"
+                      onClick={autoCallNext} 
+                      disabled={game.status !== 'STARTED' || isCallingPaused} 
                       style={{ 
-                        display: 'block', 
-                        textAlign: 'center', 
-                        background: 'var(--secondary)', 
-                        padding: '0.6rem 1rem', 
-                        borderRadius: '0.75rem',
-                        fontSize: '0.85rem',
-                        cursor: 'pointer',
+                        flex: 1, 
+                        background: 'linear-gradient(135deg, var(--secondary) 0%, var(--accent) 100%)',
                         fontWeight: 'bold',
+                        opacity: (game.status !== 'STARTED' || isCallingPaused) ? 0.5 : 1,
                         margin: 0
                       }}
                     >
-                      📂 Load Audio Files (.mp3 / .wav)
-                    </label>
-                    <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', margin: '0.5rem 0 0 0', textAlign: 'center' }}>
-                      Upload actual tracks to play them directly from this dashboard!
-                    </p>
+                      🎲 Auto Call Next Number
+                    </button>
                   </div>
-                )}
-              </div>
 
-              {audioFiles.length > 0 ? (
-                <>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '240px', overflowY: 'auto', paddingRight: '0.5rem', marginBottom: '1.25rem', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '1rem', padding: '0.75rem', background: 'rgba(0,0,0,0.1)' }}>
-                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 'bold', marginBottom: '0.25rem', textAlign: 'left' }}>Click track to Play & Call:</div>
-                    {audioFiles.map(track => {
-                      const isTrackCalled = calledNumbers.includes(track.id);
-                      const isTrackPlaying = currentPlayingId === track.id && isPlaying;
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(10, 1fr)',
+                    gap: '0.35rem',
+                    maxHeight: '360px',
+                    overflowY: 'auto',
+                    background: 'rgba(0,0,0,0.15)',
+                    padding: '0.75rem',
+                    borderRadius: '0.75rem',
+                    border: '1px solid rgba(255,255,255,0.05)',
+                    margin: '1rem 0'
+                  }}>
+                    {Array.from({ length: 90 }, (_, i) => i + 1).map(num => {
+                      const isCalled = calledNumbers.includes(num);
+                      const isAnchor = game.game_mode === 'PARTY_CLIMAX' && JSON.parse(game.finale_numbers || '[]').includes(num);
+                      
                       return (
-                        <div 
-                          key={track.id} 
-                          style={{ 
-                            display: 'flex', 
-                            alignItems: 'center', 
-                            justifyContent: 'space-between', 
-                            background: isTrackPlaying ? 'rgba(99, 102, 241, 0.15)' : 'rgba(255,255,255,0.02)', 
-                            border: isTrackPlaying ? '1px solid var(--accent)' : '1px solid rgba(255,255,255,0.05)',
-                            padding: '0.5rem 0.75rem', 
-                            borderRadius: '0.75rem',
-                            opacity: isTrackCalled && !isTrackPlaying ? 0.5 : 1
+                        <button
+                          key={num}
+                          onClick={() => {
+                            if (!isCalled) {
+                              socket.emit('ADMIN_CALL_NUMBER', { gameId: game.id, number: num });
+                            }
                           }}
+                          disabled={game.status !== 'STARTED' || isCallingPaused}
+                          style={{
+                            aspectRatio: '1',
+                            padding: 0,
+                            fontSize: '0.85rem',
+                            fontWeight: 'bold',
+                            borderRadius: '0.35rem',
+                            background: isCalled 
+                              ? 'var(--secondary)' 
+                              : (isAnchor ? 'rgba(236, 72, 153, 0.15)' : 'rgba(255,255,255,0.05)'),
+                            border: isCalled 
+                              ? '1px solid var(--secondary)' 
+                              : (isAnchor ? '1px dashed var(--primary)' : '1px solid rgba(255,255,255,0.08)'),
+                            color: isCalled ? 'white' : (isAnchor ? 'var(--primary)' : 'var(--text-muted)'),
+                            boxShadow: 'none',
+                            cursor: isCalled ? 'default' : 'pointer',
+                            margin: 0
+                          }}
+                          title={isAnchor ? `Anchor Number: ${num}` : `Number: ${num}`}
                         >
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', overflow: 'hidden', textAlign: 'left' }}>
-                            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>#{track.id}</span>
-                            <span style={{ fontSize: '0.85rem', fontWeight: isTrackPlaying ? 'bold' : 'normal', color: isTrackPlaying ? 'var(--accent)' : 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={track.name}>
-                              {track.name}
-                            </span>
-                          </div>
-                          <div style={{ display: 'flex', gap: '0.35rem' }}>
-                            <button 
-                              onClick={() => playTrack(track.id)}
-                              disabled={isCallingPaused}
-                              style={{ 
-                                background: isTrackPlaying ? 'var(--accent)' : 'var(--secondary)', 
-                                fontSize: '0.75rem', 
-                                padding: '0.25rem 0.75rem',
-                                height: 'auto',
-                                width: 'auto',
-                                boxShadow: 'none'
-                              }}
-                            >
-                              {isTrackPlaying ? '⏸️ Pause' : '▶️ Play'}
-                            </button>
-                          </div>
-                        </div>
+                          {num}
+                        </button>
                       );
                     })}
                   </div>
-                  
-                  <div style={{ display: 'flex', gap: '0.5rem' }}>
-                    <button 
-                      onClick={autoCallNext} 
-                      disabled={isCallingPaused} 
-                      style={{ 
-                        flex: 1, 
-                        background: 'linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%)',
-                        fontWeight: 'bold',
-                        opacity: isCallingPaused ? 0.5 : 1
-                      }}
-                    >
-                      🎵 Auto Play Next Song
-                    </button>
-                  </div>
-                </>
+                </div>
               ) : (
                 <>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '240px', overflowY: 'auto', paddingRight: '0.5rem', marginBottom: '1.25rem', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '1rem', padding: '0.75rem', background: 'rgba(0,0,0,0.1)' }}>
-                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 'bold', marginBottom: '0.25rem', textAlign: 'left' }}>Click Call or Play on Spotify:</div>
-                    {playlist
-                      .map((song, index) => ({ song, id: index + 1 }))
-                      .filter(item => !calledNumbers.includes(item.id))
-                      .map(item => (
-                        <div 
-                          key={item.id} 
+                  <div style={{
+                    background: 'rgba(255,255,255,0.02)',
+                    border: '1px dashed rgba(255,255,255,0.1)',
+                    padding: '1.25rem',
+                    borderRadius: '1rem',
+                    marginBottom: '1.25rem',
+                    textAlign: 'left'
+                  }}>
+                    <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>
+                      🎵 Play Mode Options:
+                    </label>
+                    
+                    {/* Spotify Desktop Sync Option */}
+                    <div style={{ 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      justifyContent: 'space-between', 
+                      padding: '0.75rem', 
+                      background: 'rgba(29, 185, 84, 0.08)', 
+                      border: '1px solid rgba(29, 185, 84, 0.2)', 
+                      borderRadius: '0.75rem',
+                      marginBottom: '1rem'
+                    }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
+                        <span style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#1db954', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                          🟢 Spotify Desktop Sync
+                        </span>
+                        <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                          Auto-call songs playing on your local Windows Spotify app!
+                        </span>
+                      </div>
+                      <input 
+                        type="checkbox"
+                        checked={spotifySyncEnabled}
+                        onChange={toggleSpotifySync}
+                        style={{ width: '20px', height: '20px', cursor: 'pointer', accentColor: '#1db954' }}
+                        disabled={game?.status !== 'STARTED'}
+                        title={game?.status !== 'STARTED' ? 'Start the game first to enable Spotify Sync' : 'Toggle Spotify Sync'}
+                      />
+                    </div>
+                    {audioFiles.length > 0 ? (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: '0.8rem', color: 'var(--success)', fontWeight: 'bold' }}>
+                          ✅ {audioFiles.length} Audio Tracks Loaded
+                        </span>
+                        <button 
+                          onClick={() => {
+                            setAudioFiles([]);
+                            if (audioRef.current) {
+                              audioRef.current.pause();
+                            }
+                            setIsPlaying(false);
+                            setCurrentPlayingId(null);
+                          }}
+                          style={{ background: 'var(--danger)', fontSize: '0.75rem', padding: '0.25rem 0.75rem', height: 'auto', width: 'auto', boxShadow: 'none', margin: 0 }}
+                        >
+                          Clear Tracks
+                        </button>
+                      </div>
+                    ) : (
+                      <div>
+                        <input 
+                          type="file" 
+                          multiple 
+                          accept="audio/*" 
+                          onChange={handleAudioFilesChange}
+                          id="audio-selector"
+                          style={{ display: 'none' }}
+                        />
+                        <label 
+                          htmlFor="audio-selector" 
+                          className="button"
                           style={{ 
-                            display: 'flex', 
-                            alignItems: 'center', 
-                            justifyContent: 'space-between', 
-                            background: 'rgba(255,255,255,0.02)', 
-                            border: '1px solid rgba(255,255,255,0.05)',
-                            padding: '0.5rem 0.75rem', 
+                            display: 'block', 
+                            textAlign: 'center', 
+                            background: 'var(--secondary)', 
+                            padding: '0.6rem 1rem', 
                             borderRadius: '0.75rem',
-                            gap: '0.5rem'
+                            fontSize: '0.85rem',
+                            cursor: 'pointer',
+                            fontWeight: 'bold',
+                            margin: 0
                           }}
                         >
-                          <span 
-                            style={{ fontSize: '0.85rem', textAlign: 'left', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }} 
-                            title={typeof item.song === 'object' && item.song !== null ? (item.song as any).name : item.song}
-                          >
-                            {typeof item.song === 'object' && item.song !== null ? (item.song as any).name : item.song}
-                          </span>
-                          <div style={{ display: 'flex', gap: '0.35rem' }}>
-                            <button 
-                              onClick={() => {
-                                socket.emit('ADMIN_CALL_NUMBER', { gameId: game?.id, number: item.id });
-                              }}
-                              disabled={isCallingPaused}
-                              style={{ 
-                                background: 'var(--secondary)', 
-                                fontSize: '0.75rem', 
-                                padding: '0.25rem 0.6rem',
-                                height: 'auto',
-                                width: 'auto',
-                                boxShadow: 'none',
-                                margin: 0
-                              }}
-                            >
-                              Call
-                            </button>
-                            <button 
-                              onClick={() => {
-                                const songTitle = typeof item.song === 'object' && item.song !== null ? (item.song as any).name : item.song;
-                                socket.emit('ADMIN_CALL_NUMBER', { gameId: game?.id, number: item.id });
-                                window.open(`https://open.spotify.com/search/${encodeURIComponent(songTitle)}`, '_blank');
-                              }}
-                              disabled={isCallingPaused}
-                              style={{ 
-                                background: '#1db954', 
-                                color: 'white',
-                                fontSize: '0.75rem', 
-                                padding: '0.25rem 0.6rem',
-                                height: 'auto',
-                                width: 'auto',
-                                boxShadow: 'none',
-                                margin: 0
-                              }}
-                            >
-                              🎵 Spotify
-                            </button>
-                          </div>
+                          📂 Load Audio Files (.mp3 / .wav)
+                        </label>
+                        <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', margin: '0.5rem 0 0 0', textAlign: 'center' }}>
+                          Upload actual tracks to play them directly from this dashboard!
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  {playlist.length === 0 ? (
+                    <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', padding: '1.5rem', borderRadius: '1rem', textAlign: 'center' }}>
+                      <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+                        Your playlist is empty. Add songs by saving custom settings or importing a Spotify playlist.
+                      </p>
+                    </div>
+                  ) : (
+                    <>
+                      {audioFiles.length > 0 ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '240px', overflowY: 'auto', paddingRight: '0.5rem', marginBottom: '1.25rem', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '1rem', padding: '0.75rem', background: 'rgba(0,0,0,0.1)' }}>
+                          <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 'bold', marginBottom: '0.25rem', textAlign: 'left' }}>Click track to Play & Call:</div>
+                          {audioFiles.map(track => {
+                            const isTrackCalled = calledNumbers.includes(track.id);
+                            const isTrackPlaying = currentPlayingId === track.id && isPlaying;
+
+                            return (
+                              <div 
+                                key={track.id} 
+                                style={{ 
+                                  display: 'flex', 
+                                  alignItems: 'center', 
+                                  justifyContent: 'space-between', 
+                                  background: isTrackPlaying ? 'rgba(99, 102, 241, 0.15)' : 'rgba(255,255,255,0.02)', 
+                                  border: isTrackPlaying ? '1px solid var(--accent)' : '1px solid rgba(255,255,255,0.05)',
+                                  padding: '0.5rem 0.75rem', 
+                                  borderRadius: '0.75rem',
+                                  opacity: isTrackCalled && !isTrackPlaying ? 0.5 : 1
+                                }}
+                              >
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', overflow: 'hidden', textAlign: 'left' }}>
+                                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>#{track.id}</span>
+                                  <span style={{ fontSize: '0.85rem', fontWeight: isTrackPlaying ? 'bold' : 'normal', color: isTrackPlaying ? 'var(--accent)' : 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={track.name}>
+                                    {track.name}
+                                  </span>
+                                </div>
+                                <div style={{ display: 'flex', gap: '0.35rem' }}>
+                                  <button 
+                                    onClick={() => playTrack(track.id)}
+                                    disabled={isCallingPaused}
+                                    style={{ 
+                                      background: isTrackPlaying ? 'var(--accent)' : 'var(--secondary)', 
+                                      fontSize: '0.75rem', 
+                                      padding: '0.25rem 0.75rem',
+                                      height: 'auto',
+                                      width: 'auto',
+                                      boxShadow: 'none',
+                                      margin: 0
+                                    }}
+                                  >
+                                    {isTrackPlaying ? '⏸️ Pause' : '▶️ Play'}
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
                         </div>
-                      ))
-                    }
-                  </div>
-                  
-                  <div style={{ display: 'flex', gap: '0.5rem' }}>
-                    <button 
-                      onClick={autoCallNext} 
-                      disabled={isCallingPaused} 
-                      style={{ 
-                        flex: 1, 
-                        background: 'linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%)',
-                        fontWeight: 'bold',
-                        opacity: isCallingPaused ? 0.5 : 1
-                      }}
-                    >
-                      🎲 Auto Select Next Song
-                    </button>
-                  </div>
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '240px', overflowY: 'auto', paddingRight: '0.5rem', marginBottom: '1.25rem', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '1rem', padding: '0.75rem', background: 'rgba(0,0,0,0.1)' }}>
+                          <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 'bold', marginBottom: '0.25rem', textAlign: 'left' }}>Click Call or Play on Spotify:</div>
+                          {playlist
+                            .map((song, index) => ({ song, id: index + 1 }))
+                            .filter(item => !calledNumbers.includes(item.id))
+                            .map(item => (
+                              <div 
+                                key={item.id} 
+                                style={{ 
+                                  display: 'flex', 
+                                  alignItems: 'center', 
+                                  justifyContent: 'space-between', 
+                                  background: 'rgba(255,255,255,0.02)', 
+                                  border: '1px solid rgba(255,255,255,0.05)',
+                                  padding: '0.5rem 0.75rem', 
+                                  borderRadius: '0.75rem',
+                                  gap: '0.5rem'
+                                }}
+                              >
+                                <span 
+                                  style={{ fontSize: '0.85rem', textAlign: 'left', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }} 
+                                  title={typeof item.song === 'object' && item.song !== null ? (item.song as any).name : item.song}
+                                >
+                                  {typeof item.song === 'object' && item.song !== null ? (item.song as any).name : item.song}
+                                </span>
+                                <div style={{ display: 'flex', gap: '0.35rem' }}>
+                                  <button 
+                                    onClick={() => {
+                                      socket.emit('ADMIN_CALL_NUMBER', { gameId: game?.id, number: item.id });
+                                    }}
+                                    disabled={isCallingPaused}
+                                    style={{ 
+                                      background: 'var(--secondary)', 
+                                      fontSize: '0.75rem', 
+                                      padding: '0.25rem 0.6rem',
+                                      height: 'auto',
+                                      width: 'auto',
+                                      boxShadow: 'none',
+                                      margin: 0
+                                    }}
+                                  >
+                                    📞 Call
+                                  </button>
+                                  <button 
+                                    onClick={() => {
+                                      const uri = typeof item.song === 'object' && item.song !== null ? (item.song as any).uri : '';
+                                      if (uri) {
+                                        socket.emit('ADMIN_CALL_NUMBER', { gameId: game?.id, number: item.id });
+                                      } else {
+                                        window.open(`https://open.spotify.com/search/${encodeURIComponent(typeof item.song === 'object' && item.song !== null ? (item.song as any).name : item.song)}`, '_blank');
+                                        socket.emit('ADMIN_CALL_NUMBER', { gameId: game?.id, number: item.id });
+                                      }
+                                    }}
+                                    disabled={isCallingPaused}
+                                    style={{ 
+                                      background: '#1db954', 
+                                      color: 'white',
+                                      fontSize: '0.75rem', 
+                                      padding: '0.25rem 0.6rem',
+                                      height: 'auto',
+                                      width: 'auto',
+                                      boxShadow: 'none',
+                                      margin: 0
+                                    }}
+                                  >
+                                    🎵 Spotify
+                                  </button>
+                                </div>
+                              </div>
+                            ))
+                          }
+                        </div>
+                      )}
+                      
+                      <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        <button 
+                          onClick={autoCallNext} 
+                          disabled={isCallingPaused} 
+                          style={{ 
+                            flex: 1, 
+                            background: 'linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%)',
+                            fontWeight: 'bold',
+                            opacity: isCallingPaused ? 0.5 : 1,
+                            margin: 0
+                          }}
+                        >
+                          🎲 Auto Select Next Song
+                        </button>
+                      </div>
+                    </>
+                  )}
                 </>
               )}
 
               <div style={{ marginTop: '1.5rem', textAlign: 'left' }}>
-                <h4 style={{ margin: '0 0 0.75rem 0', fontSize: '0.9rem', color: 'var(--text-muted)' }}>Called Songs History:</h4>
+                <h4 style={{ margin: '0 0 0.75rem 0', fontSize: '0.9rem', color: 'var(--text-muted)' }}>
+                  {game.game_type === 'NUMERIC' ? 'Called Numbers History:' : 'Called Songs History:'}
+                </h4>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '180px', overflowY: 'auto', paddingRight: '0.5rem' }}>
                   {calledNumbers.slice().reverse().map((num, idx) => (
                     <div key={num} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', background: 'rgba(255,255,255,0.02)', padding: '0.4rem 0.75rem', borderRadius: '0.5rem' }}>
                       <span>{(() => {
+                        if (game.game_type === 'NUMERIC') return `Number ${num}`;
                         const item = playlist[num - 1];
                         return item ? (typeof item === 'object' && item !== null ? (item as any).name : item) : `Song #${num}`;
                       })()}</span>
@@ -1344,7 +1505,9 @@ const AdminDashboard: React.FC = () => {
                     </div>
                   ))}
                   {calledNumbers.length === 0 && (
-                    <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem', fontStyle: 'italic' }}>No songs called yet.</div>
+                    <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem', fontStyle: 'italic' }}>
+                      {game.game_type === 'NUMERIC' ? 'No numbers called yet.' : 'No songs called yet.'}
+                    </div>
                   )}
                 </div>
               </div>

@@ -59,6 +59,7 @@ const GamePage: React.FC = () => {
               window.location.href = '/';
             } else {
               setPlayerData(data);
+              setGameType(activeGame.game_type || 'MUSIC');
               if (activeGame.status === 'FINISHED') {
                 setGameStatus('FINISHED');
                 if (activeGame.promo_image) {
@@ -88,6 +89,7 @@ const GamePage: React.FC = () => {
   const [gameStatus, setGameStatus] = useState<string>('WAITING');
   const [finishedPromoImage, setFinishedPromoImage] = useState<string>('');
   const { branding } = useBranding();
+  const [gameType, setGameType] = useState<string>('MUSIC');
 
   // Load custom branding and playlist dynamically for the current game
   useEffect(() => {
@@ -105,6 +107,7 @@ const GamePage: React.FC = () => {
           const gameRes = await fetch(`${API_BASE}/api/game?id=${playerData.gameId}`);
           if (gameRes.ok) {
             const gameData = await gameRes.json();
+            setGameType(gameData.game_type || 'MUSIC');
             if (gameData.playlist) {
               setPlaylist(JSON.parse(gameData.playlist));
             }
@@ -292,11 +295,15 @@ const GamePage: React.FC = () => {
         <div className="called-number-display-wrapper" style={{ height: 'auto', minHeight: '120px' }}>
           {(() => {
             const currentItem = lastCalled && playlist[lastCalled - 1];
-            const displayTitle = currentItem 
-              ? (typeof currentItem === 'object' ? currentItem.name : currentItem)
-              : null;
+            const displayTitle = gameType === 'NUMERIC'
+              ? (lastCalled ? `Number ${lastCalled}` : null)
+              : (currentItem 
+                  ? (typeof currentItem === 'object' ? currentItem.name : currentItem)
+                  : null);
+            const label = gameType === 'NUMERIC' ? 'Called Number' : 'Now Playing';
+            const isActive = lastCalled !== null;
             return (
-              <div className={`bingo-ball ${displayTitle ? 'active' : 'idle'}`} style={{ 
+              <div className={`bingo-ball ${isActive ? 'active' : 'idle'}`} style={{ 
                 borderRadius: '1.5rem', 
                 width: 'auto', 
                 minWidth: '240px', 
@@ -314,7 +321,7 @@ const GamePage: React.FC = () => {
                   justifyContent: 'center',
                   gap: '0.25rem'
                 }}>
-                  <span style={{ fontSize: '0.75rem', textTransform: 'uppercase', opacity: 0.6, letterSpacing: '2px', fontWeight: 800 }}>Now Playing</span>
+                  <span style={{ fontSize: '0.75rem', textTransform: 'uppercase', opacity: 0.6, letterSpacing: '2px', fontWeight: 800 }}>{label}</span>
                   <span className="ball-number" style={{ 
                     fontSize: '1.2rem', 
                     whiteSpace: 'normal', 
@@ -344,13 +351,14 @@ const GamePage: React.FC = () => {
       </div>
 
       <div className="card">
-        <h3>Song History ({calledNumbers.size} called)</h3>
+        <h3>{gameType === 'NUMERIC' ? 'Number History' : 'Song History'} ({calledNumbers.size} called)</h3>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', maxHeight: '300px', overflowY: 'auto', paddingRight: '0.5rem' }}>
           {Array.from(calledNumbers).reverse().map((num, idx) => {
-            const item = playlist[num - 1];
-            const songName = item 
-              ? (typeof item === 'object' && item !== null ? item.name : item)
-              : `Song #${num}`;
+            const songName = gameType === 'NUMERIC'
+              ? `Number ${num}`
+              : (playlist[num - 1] 
+                  ? (typeof playlist[num - 1] === 'object' && playlist[num - 1] !== null ? (playlist[num - 1] as any).name : playlist[num - 1])
+                  : `Song #${num}`);
             const isLast = num === lastCalled;
             return (
               <div 
