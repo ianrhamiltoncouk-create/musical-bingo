@@ -1,25 +1,25 @@
+# Musical Bingo Web App
 
-# Controlled Bingo Web App
+A web-based musical bingo game where card numbers are replaced with song tracks, featuring an integrated audio player, Spotify auto-playback, and a smart single-winner guarantee system.
 
-A web-based bingo game with a "controlled finale" where everyone wins at the same time.
-
-## Features
-- **Unique Bingo Cards**: Every player gets a unique 3x3 card.
-- **Early Wins**: Players can win lines or corners genuinely before the finale.
-- **Controlled Finale**: The host can trigger a finale sequence that makes all active players win simultaneously.
-- **Real-time Sync**: Uses Socket.IO for instant number updates and win notifications.
-- **Mobile Friendly**: Designed for mobile use.
+## Key Features
+- **Smart Single-Winner Guarantee**: Ensures that exactly one designated player wins the Full House, building maximum group suspense.
+- **Spotify Autoplay Integration**: Connect your Spotify Developer App credentials and play songs from a Spotify playlist URL. The app automatically controls your Spotify player in the background (PC or phone) and registers calls in real-time.
+- **Local Audio Track Player**: Select a folder of local `.mp3` or `.wav` files to play music directly through your PC browser while automatically broadcasting track calls to players.
+- **Linear Game Progression**: Smooth transitions from Stage 1 (Line Win) to Stage 2 (Two Lines Win) to Stage 3 (Full House).
+- **Responsive Web & Mobile Support**: Fully mobile-friendly client cards and host dashboards.
+- **Custom Branding & Redirects**: Upload logos, custom primary/secondary colors, background themes, custom end-of-game promo images, and auto-redirect links.
 
 ## Quick Start (Windows)
 Double-click `run-bingo.bat` in the root folder. This will:
-1. Start the server.
-2. Start the client.
-3. Open both the Player and Admin pages in your browser.
+1. Build the latest client code.
+2. Launch the minimized Node.js SQLite server.
+3. Automatically open both the Player and Admin pages in your browser.
 
 ## Manual Setup
 
 ### Prerequisites
-- Node.js installed
+- Node.js (v18+)
 
 ### Installation
 
@@ -34,16 +34,12 @@ Double-click `run-bingo.bat` in the root folder. This will:
    ```bash
    cd client
    npm install
-   npm run dev
+   npm run build
    ```
 
 ## How to Play
-1. Players navigate to the root URL to join.
+1. Players join the game room code.
 2. The host navigates to `/admin` to control the game.
-3. The host starts the game and calls numbers.
-4. When ready, the host clicks "TRIGGER FINALE" to complete the game.
-
-## Tech Stack
-- **Frontend**: React, TypeScript, Vite, Vanilla CSS
-- **Backend**: Node.js, Express, Socket.IO, SQLite
-- **Real-time**: Socket.IO
+3. Paste/import your playlist of songs (or connect Spotify/drag audio files).
+4. The host starts the game and plays/calls tracks.
+5. The game notifies players of line and house wins in real-time with confetti!
