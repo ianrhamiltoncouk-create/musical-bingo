@@ -16,6 +16,7 @@ async function initDb() {
       id TEXT PRIMARY KEY,
       status TEXT DEFAULT 'WAITING', -- WAITING, STARTED, FINALE, FINISHED
       game_mode TEXT DEFAULT 'SINGLE_WINNER', -- SINGLE_WINNER, PARTY_CLIMAX
+      game_type TEXT DEFAULT 'MUSIC', -- MUSIC, NUMERIC
       finale_numbers TEXT, -- JSON array
       redirect_url TEXT,
       redirect_delay INTEGER DEFAULT 30,
@@ -123,6 +124,9 @@ async function initDb() {
   } catch (e) {}
   try {
     await db.exec(`ALTER TABLE games ADD COLUMN license_key TEXT;`);
+  } catch (e) {}
+  try {
+    await db.exec(`ALTER TABLE games ADD COLUMN game_type TEXT DEFAULT 'MUSIC';`);
   } catch (e) {}
 
   // Seed a default trial license key for testing
