@@ -74,7 +74,9 @@ const AdminDashboard: React.FC = () => {
   const [spotifyConnected, setSpotifyConnected] = useState<boolean>(false);
   const [spotifyPlaylists, setSpotifyPlaylists] = useState<any[]>([]);
   const [selectedGameType, setSelectedGameType] = useState<'MUSIC' | 'NUMERIC'>('MUSIC');
+  const [spotifyConfigured, setSpotifyConfigured] = useState<boolean>(false);
   const [selectedGameMode, setSelectedGameMode] = useState<'SINGLE_WINNER' | 'PARTY_CLIMAX'>('SINGLE_WINNER');
+  const [showAdvancedSpotify, setShowAdvancedSpotify] = useState<boolean>(false);
 
   const [licenseVerified, setLicenseVerified] = useState<boolean>(false);
   const [licenseKeyInput, setLicenseKeyInput] = useState<string>('');
@@ -449,6 +451,7 @@ const AdminDashboard: React.FC = () => {
         const res = await fetch(`${API_BASE}/api/config`);
         const data = await res.json();
         setHostIp(data.hostIp);
+        setSpotifyConfigured(!!data.spotifyConfigured);
       } catch (error) {
         console.error('Failed to fetch config:', error);
       }
@@ -1128,34 +1131,61 @@ const AdminDashboard: React.FC = () => {
                 <span style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#1db954', display: 'block', marginBottom: '0.5rem' }}>
                   🟢 Spotify Auto Play Integration
                 </span>
-                <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', margin: '0 0 0.75rem 0' }}>
-                  Provide Spotify Client ID & Client Secret from <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener noreferrer" style={{ color: '#1db954', textDecoration: 'underline' }}>Spotify Developer Portal</a>. Set Redirect URI to: <code style={{ background: 'rgba(0,0,0,0.3)', padding: '0.1rem 0.25rem', borderRadius: '0.25rem', fontSize: '0.65rem' }}>{window.location.origin}/api/spotify/callback</code>
-                </p>
-                
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '0.75rem' }}>
-                  <input 
-                    type="text" 
-                    placeholder="Spotify Client ID" 
-                    value={spotifyClientId} 
-                    onChange={e => setSpotifyClientId(e.target.value)} 
-                    style={{ fontSize: '0.8rem', padding: '0.4rem 0.6rem' }}
-                  />
-                  <input 
-                    type="password" 
-                    placeholder="Spotify Client Secret" 
-                    value={spotifyClientSecret} 
-                    onChange={e => setSpotifyClientSecret(e.target.value)} 
-                    style={{ fontSize: '0.8rem', padding: '0.4rem 0.6rem' }}
-                  />
-                  <button 
-                    onClick={saveSpotifyCredentials} 
-                    style={{ fontSize: '0.75rem', padding: '0.4rem 0.75rem', height: 'auto', background: '#1db954', color: 'white', border: 'none', margin: 0 }}
-                  >
-                    Save Credentials
-                  </button>
-                </div>
+                {spotifyConfigured && (
+                  <p style={{ color: 'var(--success)', fontSize: '0.75rem', fontWeight: 'bold', margin: '0.5rem 0 0.75rem 0' }}>
+                    ✓ Ready to Connect: Shared Spotify Application active.
+                  </p>
+                )}
 
-                {spotifyClientId && spotifyClientSecret && (
+                {(!spotifyConfigured || showAdvancedSpotify) ? (
+                  <>
+                    <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', margin: '0 0 0.75rem 0' }}>
+                      Provide Spotify Client ID & Client Secret from <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener noreferrer" style={{ color: '#1db954', textDecoration: 'underline' }}>Spotify Developer Portal</a>. Set Redirect URI to: <code style={{ background: 'rgba(0,0,0,0.3)', padding: '0.1rem 0.25rem', borderRadius: '0.25rem', fontSize: '0.65rem' }}>{window.location.origin}/api/spotify/callback</code>
+                    </p>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '0.75rem' }}>
+                      <input 
+                        type="text" 
+                        placeholder="Spotify Client ID" 
+                        value={spotifyClientId} 
+                        onChange={e => setSpotifyClientId(e.target.value)} 
+                        style={{ fontSize: '0.8rem', padding: '0.4rem 0.6rem' }}
+                      />
+                      <input 
+                        type="password" 
+                        placeholder="Spotify Client Secret" 
+                        value={spotifyClientSecret} 
+                        onChange={e => setSpotifyClientSecret(e.target.value)} 
+                        style={{ fontSize: '0.8rem', padding: '0.4rem 0.6rem' }}
+                      />
+                      <button 
+                        onClick={saveSpotifyCredentials} 
+                        style={{ fontSize: '0.75rem', padding: '0.4rem 0.75rem', height: 'auto', background: '#1db954', color: 'white', border: 'none', margin: 0 }}
+                      >
+                        Save Credentials
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <button 
+                    onClick={() => setShowAdvancedSpotify(true)}
+                    style={{
+                      background: 'transparent',
+                      border: '1px dashed rgba(255,255,255,0.15)',
+                      color: 'var(--text-muted)',
+                      fontSize: '0.7rem',
+                      padding: '0.35rem 0.75rem',
+                      width: '100%',
+                      marginBottom: '0.75rem',
+                      height: 'auto',
+                      boxShadow: 'none',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    ⚙️ Configure Custom Spotify API Keys
+                  </button>
+                )}
+
+                {(spotifyConfigured || (spotifyClientId && spotifyClientSecret)) && (
                   <div style={{ marginTop: '0.75rem', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '0.75rem' }}>
                     <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.35rem' }}>
                       Status: {spotifyConnected ? <span style={{ color: 'var(--success)', fontWeight: 'bold' }}>Connected ✅</span> : <span style={{ color: 'var(--warning)', fontWeight: 'bold' }}>Disconnected ❌</span>}

@@ -116,7 +116,13 @@ async function generateUniqueRoomCode(db) {
 async function refreshSpotifyToken(gameId) {
   const db = getDb();
   const game = await db.get('SELECT * FROM games WHERE id = ?', [gameId]);
-  if (!game || !game.spotify_refresh_token || !game.spotify_client_id || !game.spotify_client_secret) {
+  if (!game || !game.spotify_refresh_token) {
+    return null;
+  }
+  
+  const clientId = game.spotify_client_id || process.env.SPOTIFY_CLIENT_ID;
+  const clientSecret = game.spotify_client_secret || process.env.SPOTIFY_CLIENT_SECRET;
+  if (!clientId || !clientSecret) {
     return null;
   }
   
@@ -125,7 +131,7 @@ async function refreshSpotifyToken(gameId) {
     params.append('grant_type', 'refresh_token');
     params.append('refresh_token', game.spotify_refresh_token);
     
-    const authHeader = Buffer.from(`${game.spotify_client_id}:${game.spotify_client_secret}`).toString('base64');
+    const authHeader = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
     
     const response = await fetch('https://accounts.spotify.com/api/token', {
       method: 'POST',
@@ -191,7 +197,10 @@ async function playSpotifyTrack(gameId, trackUri) {
 // REST Endpoints
 
 app.get('/api/config', (req, res) => {
-  res.json({ hostIp: getLocalIp() });
+  res.json({ 
+    hostIp: getLocalIp(),
+    spotifyConfigured: !!process.env.SPOTIFY_CLIENT_ID
+  });
 });
 
 // Branding endpoints (scoped by game room or defaulted)
@@ -441,14 +450,17 @@ app.get('/api/spotify/login', async (req, res) => {
   try {
     const db = getDb();
     const game = await db.get('SELECT * FROM games WHERE id = ?', [gameId]);
-    if (!game || !game.spotify_client_id) {
-      return res.status(400).send('Please enter Spotify Client ID first.');
+    if (!game) return res.status(404).send('Game not found.');
+    
+    const clientId = game.spotify_client_id || process.env.SPOTIFY_CLIENT_ID;
+    if (!clientId) {
+      return res.status(400).send('Please configure Spotify Client ID in server environment variables or game settings.');
     }
     
     const redirectUri = `${req.protocol}://${req.headers.host}/api/spotify/callback`;
     const scopes = 'user-modify-playback-state user-read-playback-state playlist-read-private playlist-read-collaborative';
     
-    const spotifyAuthUrl = `https://accounts.spotify.com/authorize?client_id=${game.spotify_client_id}&response_type=code&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scopes)}&state=${gameId}`;
+    const spotifyAuthUrl = `https://accounts.spotify.com/authorize?client_id=${clientId}&response_type=code&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scopes)}&state=${gameId}`;
     res.redirect(spotifyAuthUrl);
   } catch (err) {
     res.status(500).send(err.message);
@@ -463,12 +475,16 @@ app.get('/api/spotify/callback', async (req, res) => {
   try {
     const db = getDb();
     const game = await db.get('SELECT * FROM games WHERE id = ?', [gameId]);
-    if (!game || !game.spotify_client_id || !game.spotify_client_secret) {
-      return res.status(400).send('Spotify credentials not found for this game.');
+    if (!game) return res.status(404).send('Game not found.');
+    
+    const clientId = game.spotify_client_id || process.env.SPOTIFY_CLIENT_ID;
+    const clientSecret = game.spotify_client_secret || process.env.SPOTIFY_CLIENT_SECRET;
+    if (!clientId || !clientSecret) {
+      return res.status(400).send('Spotify credentials not configured.');
     }
     
     const redirectUri = `${req.protocol}://${req.headers.host}/api/spotify/callback`;
-    const authHeader = Buffer.from(`${game.spotify_client_id}:${game.spotify_client_secret}`).toString('base64');
+    const authHeader = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
     
     const params = new URLSearchParams();
     params.append('grant_type', 'authorization_code');
