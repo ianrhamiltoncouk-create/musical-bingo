@@ -72,6 +72,7 @@ const AdminDashboard: React.FC = () => {
   const [spotifyClientSecret, setSpotifyClientSecret] = useState<string>('');
   const [spotifyPlaylistUrl, setSpotifyPlaylistUrl] = useState<string>('');
   const [spotifyConnected, setSpotifyConnected] = useState<boolean>(false);
+  const [spotifyPlaylists, setSpotifyPlaylists] = useState<any[]>([]);
   const [selectedGameType, setSelectedGameType] = useState<'MUSIC' | 'NUMERIC'>('MUSIC');
   const [selectedGameMode, setSelectedGameMode] = useState<'SINGLE_WINNER' | 'PARTY_CLIMAX'>('SINGLE_WINNER');
 
@@ -111,6 +112,29 @@ const AdminDashboard: React.FC = () => {
       setSpotifyConnected(!!(game as any).spotify_access_token);
     }
   }, [game]);
+
+  const fetchSpotifyPlaylists = useCallback(async () => {
+    if (!game?.id || !spotifyConnected) return;
+    try {
+      const res = await fetch(`${API_BASE}/api/spotify/playlists?gameId=${game.id}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success) {
+          setSpotifyPlaylists(data.playlists);
+        }
+      }
+    } catch (e) {
+      console.error('Failed to fetch Spotify playlists:', e);
+    }
+  }, [game?.id, spotifyConnected]);
+
+  useEffect(() => {
+    if (spotifyConnected) {
+      fetchSpotifyPlaylists();
+    } else {
+      setSpotifyPlaylists([]);
+    }
+  }, [spotifyConnected, fetchSpotifyPlaylists]);
 
   // Generate local QR code offline
   useEffect(() => {
@@ -1156,6 +1180,58 @@ const AdminDashboard: React.FC = () => {
 
                     {spotifyConnected && (
                       <div style={{ marginTop: '0.75rem' }}>
+                        {spotifyPlaylists.length > 0 && (
+                          <div style={{ marginBottom: '0.75rem' }}>
+                            <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>
+                              Or Quick Select from Your Playlists:
+                            </label>
+                            <select
+                              onChange={async (e) => {
+                                const selectedUrl = e.target.value;
+                                if (selectedUrl) {
+                                  setSpotifyPlaylistUrl(selectedUrl);
+                                  try {
+                                    const res = await fetch(`${API_BASE}/api/spotify/import`, {
+                                      method: 'POST',
+                                      headers: { 'Content-Type': 'application/json' },
+                                      body: JSON.stringify({
+                                        gameId: game?.id,
+                                        playlistUrl: selectedUrl
+                                      })
+                                    });
+                                    if (res.ok) {
+                                      const data = await res.json();
+                                      alert(`Successfully imported ${data.tracksCount} tracks from Spotify!`);
+                                      await fetchGame(game?.id || '');
+                                    } else {
+                                      const err = await res.json();
+                                      alert(`Failed to import: ${err.error}`);
+                                    }
+                                  } catch (err) {
+                                    console.error(err);
+                                  }
+                                }
+                              }}
+                              style={{
+                                width: '100%',
+                                padding: '0.45rem',
+                                borderRadius: '0.5rem',
+                                background: 'rgba(0,0,0,0.3)',
+                                border: '1px solid rgba(255,255,255,0.1)',
+                                color: 'white',
+                                fontSize: '0.75rem',
+                                cursor: 'pointer'
+                              }}
+                            >
+                              <option value="">-- Choose Playlist --</option>
+                              {spotifyPlaylists.map(p => (
+                                <option key={p.id} value={p.url}>
+                                  {p.name} ({p.tracksCount} songs)
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
                         <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>Import Spotify Playlist URL</label>
                         <div style={{ display: 'flex', gap: '0.35rem' }}>
                           <input 
