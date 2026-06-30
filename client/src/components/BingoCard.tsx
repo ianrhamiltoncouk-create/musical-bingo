@@ -30,15 +30,21 @@ const BingoCard: React.FC<BingoCardProps> = ({ card, markedNumbers, userMarked, 
               className={`bingo-cell ${isUserMarked ? 'daubed' : ''} ${isServerMarked ? 'called' : ''}`}
               onClick={() => typeof cell === 'number' && onCellClick(cell)}
               style={{
-                fontSize: '0.85rem',
-                padding: '0.5rem',
+                fontSize: typeof cell === 'number' && !playlist 
+                  ? '1.6rem' 
+                  : (String(songTitle).length > 30 
+                      ? '0.65rem' 
+                      : (String(songTitle).length > 18 ? '0.725rem' : '0.8rem')),
+                padding: '0.4rem',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 textAlign: 'center',
-                minHeight: '80px',
+                minHeight: '84px',
                 wordBreak: 'break-word',
-                fontWeight: 700
+                fontWeight: 700,
+                lineHeight: '1.25',
+                overflow: 'hidden'
               }}
             >
               {songTitle}

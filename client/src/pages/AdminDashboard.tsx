@@ -2464,24 +2464,34 @@ const AdminDashboard: React.FC = () => {
             Reset Entire Game
           </button>
 
-      <div className="card">
-        <h3>Live Winners</h3>
-        <div className="winners-list">
-          {winners.filter(w => w.type !== 'FULL_HOUSE').length === 0 && (
-            <p style={{ color: 'var(--text-muted)' }}>
-              {winners.some(w => w.type === 'FULL_HOUSE') ? 'Everyone won! (Full House)' : 'Waiting for winners...'}
-            </p>
-          )}
-          {winners.filter(w => w.type !== 'FULL_HOUSE').map((w, i) => (
-            <div key={i} className="winner-item">
-              <strong>{w.type}</strong>
-              <span style={{ fontSize: '0.875rem', opacity: 0.7 }}>
-                {w.name ? `${w.name} (ID: ${w.id.slice(0, 8)})` : `ID: ${w.id.slice(0, 8)}`}
-              </span>
-            </div>
-          ))}
+      {game.status !== 'WAITING' && (
+        <div className="card">
+          <h3>Live Winners</h3>
+          <div className="winners-list">
+            {winners.length === 0 && (
+              <p style={{ color: 'var(--text-muted)' }}>Waiting for winners...</p>
+            )}
+            {game.game_mode === 'PARTY_CLIMAX' && winners.some(w => w.type === 'FULL_HOUSE') && (
+              <p style={{ color: 'var(--success)', fontWeight: 'bold', margin: '0 0 1rem 0' }}>
+                🎭 Comedy Climax triggered! Everyone wins!
+              </p>
+            )}
+            {winners
+              .filter(w => game.game_mode !== 'PARTY_CLIMAX' || w.type !== 'FULL_HOUSE')
+              .map((w, i) => (
+                <div key={i} className="winner-item">
+                  <strong style={{ color: w.type === 'FULL_HOUSE' ? 'var(--accent)' : 'inherit' }}>
+                    {w.type === 'FULL_HOUSE' ? '🏆 Full House' : (w.type === 'TWO_LINES' ? '🥈 Two Lines' : '🥇 One Line')}
+                  </strong>
+                  <span style={{ fontSize: '0.875rem', opacity: 0.7 }}>
+                    {w.name ? `${w.name} (ID: ${w.id.slice(0, 8)})` : `ID: ${w.id.slice(0, 8)}`}
+                  </span>
+                </div>
+              ))
+            }
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Fullscreen QR Modal Overlay */}
       {showQrModal && (() => {
@@ -2495,55 +2505,67 @@ const AdminDashboard: React.FC = () => {
             position: 'fixed',
             top: 0,
             left: 0,
-            width: '100vw',
-            height: '100vh',
+            width: '100%',
+            height: '100%',
             background: 'rgba(13, 5, 38, 0.98)',
             display: 'flex',
             flexDirection: 'column',
-            justifyContent: 'center',
+            justifyContent: 'flex-start',
             alignItems: 'center',
             zIndex: 99999,
-            padding: '2rem'
+            padding: '2rem 1.5rem',
+            overflowY: 'auto',
+            boxSizing: 'border-box'
           }}>
-            <h1 style={{ color: 'white', marginBottom: '0.5rem', fontWeight: 900, fontSize: '2.5rem', textShadow: '0 0 20px rgba(99,102,241,0.5)' }}>
+            <h1 style={{ color: 'white', margin: '0 0 0.5rem 0', fontWeight: 900, fontSize: '2.25rem', textShadow: '0 0 20px rgba(99,102,241,0.5)', textAlign: 'center' }}>
               Join the Game!
             </h1>
-            <p style={{ color: 'var(--text-muted)', fontSize: '1.25rem', marginBottom: '2rem' }}>
+            <p style={{ color: 'var(--text-muted)', fontSize: '1.1rem', margin: '0 0 1.5rem 0', textAlign: 'center' }}>
               Scan the QR code below or visit the URL to get your card:
             </p>
 
             <div style={{
               background: 'white',
-              padding: '2rem',
-              borderRadius: '2rem',
+              padding: '1.25rem',
+              borderRadius: '1.5rem',
               boxShadow: '0 15px 50px rgba(0, 0, 0, 0.8)',
-              marginBottom: '2rem'
+              marginBottom: '1.5rem',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: '100%',
+              maxWidth: '280px',
+              aspectRatio: '1/1',
+              boxSizing: 'border-box'
             }}>
               {qrCodeUrl ? (
                 <img 
                   src={qrCodeUrl} 
                   alt="Scan to join" 
-                  style={{ display: 'block', width: '320px', height: '320px' }}
+                  style={{ display: 'block', width: '100%', height: '100%', objectFit: 'contain' }}
                 />
               ) : (
-                <div style={{ width: '320px', height: '320px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0d0526', fontSize: '1.25rem', fontWeight: 'bold' }}>
-                  Generating QR Code...
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0d0526', fontSize: '1.1rem', fontWeight: 'bold' }}>
+                  Generating...
                 </div>
               )}
             </div>
 
             <div style={{
-              fontSize: '1.5rem',
+              fontSize: '1.2rem',
               fontFamily: 'monospace',
               color: 'var(--accent)',
               fontWeight: 900,
               background: 'rgba(255,255,255,0.03)',
-              padding: '0.75rem 1.5rem',
-              borderRadius: '1rem',
+              padding: '0.6rem 1.2rem',
+              borderRadius: '0.75rem',
               border: '1px solid rgba(255,255,255,0.05)',
-              marginBottom: '3rem',
+              marginBottom: '2rem',
               textAlign: 'center',
-              wordBreak: 'break-all'
+              wordBreak: 'break-all',
+              width: '100%',
+              maxWidth: '520px',
+              boxSizing: 'border-box'
             }}>
               {joinUrl}
             </div>
@@ -2552,11 +2574,14 @@ const AdminDashboard: React.FC = () => {
               onClick={() => setShowQrModal(false)}
               style={{
                 background: 'var(--danger)',
-                fontSize: '1.2rem',
-                padding: '0.75rem 2rem',
-                borderRadius: '1rem',
+                fontSize: '1.1rem',
+                padding: '0.65rem 1.75rem',
+                borderRadius: '0.75rem',
                 fontWeight: 'bold',
-                cursor: 'pointer'
+                cursor: 'pointer',
+                border: 'none',
+                boxShadow: 'none',
+                margin: 0
               }}
             >
               ✕ Close Display

@@ -589,6 +589,50 @@ app.post('/api/spotify/import', async (req, res) => {
   }
 });
 
+// Get Spotify Playlists of Connected User
+app.get('/api/spotify/playlists', async (req, res) => {
+  const { gameId } = req.query;
+  if (!gameId) return res.status(400).json({ error: 'gameId required' });
+  try {
+    const db = getDb();
+    const game = await db.get('SELECT * FROM games WHERE id = ?', [gameId]);
+    if (!game) return res.status(404).json({ error: 'Game not found' });
+    
+    let token = game.spotify_access_token;
+    if (!token) return res.status(401).json({ error: 'Spotify account not connected.' });
+    
+    const fetchPlaylists = async (bearerToken) => {
+      return fetch('https://api.spotify.com/v1/me/playlists?limit=50', {
+        headers: { 'Authorization': `Bearer ${bearerToken}` }
+      });
+    };
+    
+    let response = await fetchPlaylists(token);
+    if (response.status === 401) {
+      token = await refreshSpotifyToken(gameId);
+      if (!token) return res.status(401).json({ error: 'Failed to refresh Spotify token.' });
+      response = await fetchPlaylists(token);
+    }
+    
+    if (!response.ok) {
+      const errText = await response.text();
+      return res.status(response.status).json({ error: `Spotify API error: ${errText}` });
+    }
+    
+    const data = await response.json();
+    const playlists = (data.items || []).map(p => ({
+      id: p.id,
+      name: p.name,
+      url: p.external_urls.spotify,
+      tracksCount: p.tracks.total
+    }));
+    
+    res.json({ success: true, playlists });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Join game (using roomCode)
 app.post('/api/game/join', async (req, res) => {
   const { name, roomCode } = req.body;
