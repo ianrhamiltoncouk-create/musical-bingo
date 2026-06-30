@@ -80,6 +80,11 @@ const AdminDashboard: React.FC = () => {
   const [activeImportTab, setActiveImportTab] = useState<'SPOTIFY' | 'LOCAL_FILES' | 'TEXT_LIST'>('SPOTIFY');
   const [activePromoTab, setActivePromoTab] = useState<'REDIRECT' | 'FLYER'>('REDIRECT');
   const [showQrModal, setShowQrModal] = useState<boolean>(false);
+  const [targetLine, setTargetLine] = useState<boolean>(true);
+  const [targetTwoLines, setTargetTwoLines] = useState<boolean>(true);
+  const [targetFullHouse, setTargetFullHouse] = useState<boolean>(true);
+  const [showQrPanel, setShowQrPanel] = useState<boolean>(false);
+  const [showPromoPanel, setShowPromoPanel] = useState<boolean>(false);
 
   const [licenseVerified, setLicenseVerified] = useState<boolean>(false);
   const [licenseKeyInput, setLicenseKeyInput] = useState<string>('');
@@ -407,6 +412,10 @@ const AdminDashboard: React.FC = () => {
       alert('You must activate a valid license key first.');
       return;
     }
+    if (!targetLine && !targetTwoLines && !targetFullHouse) {
+      alert('Please select at least one winning target (Line, Two Lines, or Full House) to run the game.');
+      return;
+    }
     try {
       const res = await fetch(`${API_BASE}/api/game/create`, {
         method: 'POST',
@@ -415,7 +424,10 @@ const AdminDashboard: React.FC = () => {
           gameType: selectedGameType,
           gameMode: selectedGameType === 'NUMERIC' ? selectedGameMode : 'SINGLE_WINNER',
           licenseKey: licenseInfo.key,
-          deviceId: deviceId
+          deviceId: deviceId,
+          targetLine,
+          targetTwoLines,
+          targetFullHouse
         })
       });
       if (res.ok) {
@@ -883,6 +895,42 @@ const AdminDashboard: React.FC = () => {
             </select>
           </div>
         )}
+
+        {/* Winning Targets Selection */}
+        <div style={{ textAlign: 'left', marginBottom: '1.5rem', background: 'rgba(255,255,255,0.02)', padding: '1rem', borderRadius: '0.75rem', border: '1px solid rgba(255,255,255,0.05)' }}>
+          <span style={{ display: 'block', fontSize: '0.875rem', fontWeight: 'bold', marginBottom: '0.75rem', color: 'var(--text-muted)' }}>
+            Active Winning Targets:
+          </span>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.9rem', userSelect: 'none' }}>
+              <input
+                type="checkbox"
+                checked={targetLine}
+                onChange={e => setTargetLine(e.target.checked)}
+                style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+              />
+              1 Line Win
+            </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.9rem', userSelect: 'none' }}>
+              <input
+                type="checkbox"
+                checked={targetTwoLines}
+                onChange={e => setTargetTwoLines(e.target.checked)}
+                style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+              />
+              2 Lines Win
+            </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.9rem', userSelect: 'none' }}>
+              <input
+                type="checkbox"
+                checked={targetFullHouse}
+                onChange={e => setTargetFullHouse(e.target.checked)}
+                style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+              />
+              Full House Win
+            </label>
+          </div>
+        </div>
 
         <button 
           onClick={createRoom} 
@@ -2140,193 +2188,268 @@ const AdminDashboard: React.FC = () => {
             </>
           )}
 
-          <div style={{ marginTop: '2rem', borderTop: '1px solid rgba(255, 255, 255, 0.08)', paddingTop: '1.5rem' }}>
-            <div style={{ display: 'flex', gap: '0.25rem', marginBottom: '1.25rem' }}>
-              <button
-                onClick={() => setActivePromoTab('REDIRECT')}
-                style={{
-                  flex: 1,
-                  fontSize: '0.75rem',
-                  padding: '0.45rem',
-                  background: activePromoTab === 'REDIRECT' ? 'var(--secondary)' : 'rgba(255,255,255,0.05)',
-                  color: 'white',
-                  border: 'none',
-                  boxShadow: 'none',
-                  margin: 0
-                }}
-              >
-                🔗 Auto Redirect URL
-              </button>
-              <button
-                onClick={() => setActivePromoTab('FLYER')}
-                style={{
-                  flex: 1,
-                  fontSize: '0.75rem',
-                  padding: '0.45rem',
-                  background: activePromoTab === 'FLYER' ? 'var(--accent)' : 'rgba(255,255,255,0.05)',
-                  color: 'white',
-                  border: 'none',
-                  boxShadow: 'none',
-                  margin: 0
-                }}
-              >
-                🖼️ Promo Flyer Image
-              </button>
+          {/* Collapsible End-of-Game Panel */}
+          <div className="card" style={{ marginTop: '2rem', padding: '1rem 1.25rem', display: 'flex', flexDirection: 'column' }}>
+            <div 
+              onClick={() => setShowPromoPanel(!showPromoPanel)}
+              style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', userSelect: 'none' }}
+            >
+              <h3 style={{ margin: 0, fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                ⚙️ {showPromoPanel ? 'Hide' : 'Show'} End of Game Redirects & Flyer
+              </h3>
+              <span style={{ fontSize: '1rem', color: 'var(--text-muted)' }}>{showPromoPanel ? '▲' : '▼'}</span>
             </div>
 
-            {activePromoTab === 'REDIRECT' && (
-              <div style={{ textAlign: 'left' }}>
-                <label style={{ display: 'block', fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>
-                  Optional End of Game Redirect URL:
-                </label>
-                <input 
-                  type="text" 
-                  value={redirectUrlInput} 
-                  onChange={e => setRedirectUrlInput(e.target.value)}
-                  onBlur={() => saveRedirectSettings(redirectUrlInput, redirectDelay, autoRedirectEnabled)}
-                  placeholder="e.g., https://instagram.com/yourprofile"
-                  style={{ width: '100%', marginBottom: '0.75rem' }}
-                />
-                {redirectUrlInput && (
-                  <>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '1.25rem', padding: '1rem', background: 'rgba(255,255,255,0.03)', borderRadius: '1rem', border: '1px solid rgba(255,255,255,0.05)' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <label htmlFor="auto-redirect-toggle" style={{ fontSize: '0.875rem', cursor: 'pointer', userSelect: 'none' }}>
-                          Auto-redirect players at game end
-                        </label>
-                        <input 
-                          id="auto-redirect-toggle"
-                          type="checkbox" 
-                          checked={autoRedirectEnabled} 
-                          onChange={e => {
-                            const val = e.target.checked;
-                            setAutoRedirectEnabled(val);
-                            saveRedirectSettings(redirectUrlInput, redirectDelay, val);
-                          }}
-                          style={{ width: '20px', height: '20px', cursor: 'pointer' }}
-                        />
-                      </div>
+            {showPromoPanel && (
+              <div style={{ marginTop: '1.25rem', borderTop: '1px solid rgba(255, 255, 255, 0.05)', paddingTop: '1.25rem' }}>
+                <div style={{ display: 'flex', gap: '0.25rem', marginBottom: '1.25rem' }}>
+                  <button
+                    onClick={() => setActivePromoTab('REDIRECT')}
+                    style={{
+                      flex: 1,
+                      fontSize: '0.75rem',
+                      padding: '0.45rem',
+                      background: activePromoTab === 'REDIRECT' ? 'var(--secondary)' : 'rgba(255,255,255,0.05)',
+                      color: 'white',
+                      border: 'none',
+                      boxShadow: 'none',
+                      margin: 0
+                    }}
+                  >
+                    🔗 Auto Redirect URL
+                  </button>
+                  <button
+                    onClick={() => setActivePromoTab('FLYER')}
+                    style={{
+                      flex: 1,
+                      fontSize: '0.75rem',
+                      padding: '0.45rem',
+                      background: activePromoTab === 'FLYER' ? 'var(--accent)' : 'rgba(255,255,255,0.05)',
+                      color: 'white',
+                      border: 'none',
+                      boxShadow: 'none',
+                      margin: 0
+                    }}
+                  >
+                    🖼️ Promo Flyer Image
+                  </button>
+                </div>
 
-                      {autoRedirectEnabled && (
-                        <div style={{ marginTop: '0.25rem' }}>
+                {activePromoTab === 'REDIRECT' && (
+                  <div style={{ textAlign: 'left' }}>
+                    <label style={{ display: 'block', fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>
+                      Optional End of Game Redirect URL:
+                    </label>
+                    <input 
+                      type="text" 
+                      value={redirectUrlInput} 
+                      onChange={e => setRedirectUrlInput(e.target.value)}
+                      onBlur={() => saveRedirectSettings(redirectUrlInput, redirectDelay, autoRedirectEnabled)}
+                      placeholder="e.g., https://instagram.com/yourprofile"
+                      style={{ width: '100%', marginBottom: '0.75rem' }}
+                    />
+                    {redirectUrlInput && (
+                      <>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '1.25rem', padding: '1rem', background: 'rgba(255,255,255,0.03)', borderRadius: '1rem', border: '1px solid rgba(255,255,255,0.05)' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <label htmlFor="auto-redirect-toggle" style={{ fontSize: '0.875rem', cursor: 'pointer', userSelect: 'none' }}>
+                              Auto-redirect players at game end
+                            </label>
+                            <input 
+                              id="auto-redirect-toggle"
+                              type="checkbox" 
+                              checked={autoRedirectEnabled} 
+                              onChange={e => {
+                                const val = e.target.checked;
+                                setAutoRedirectEnabled(val);
+                                saveRedirectSettings(redirectUrlInput, redirectDelay, val);
+                              }}
+                              style={{ width: '20px', height: '20px', cursor: 'pointer' }}
+                            />
+                          </div>
+
+                          {autoRedirectEnabled && (
+                            <div style={{ marginTop: '0.25rem' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>
+                                <span>Redirect Delay:</span>
+                                <span style={{ fontWeight: 800, color: 'var(--accent)' }}>{redirectDelay} seconds</span>
+                              </div>
+                              <input 
+                                type="range" 
+                                min="5" 
+                                max="60" 
+                                step="5"
+                                value={redirectDelay} 
+                                onChange={e => {
+                                  setRedirectDelay(Number(e.target.value));
+                                }}
+                                onMouseUp={e => {
+                                  saveRedirectSettings(redirectUrlInput, Number((e.target as HTMLInputElement).value), autoRedirectEnabled);
+                                }}
+                                onTouchEnd={e => {
+                                  saveRedirectSettings(redirectUrlInput, Number((e.target as HTMLInputElement).value), autoRedirectEnabled);
+                                }}
+                                style={{ width: '100%', cursor: 'pointer', accentColor: 'var(--accent)' }}
+                              />
+                            </div>
+                          )}
+                        </div>
+                        <button 
+                          onClick={() => {
+                            saveRedirectSettings(redirectUrlInput, redirectDelay, autoRedirectEnabled).then(() => {
+                              forceRedirect();
+                            });
+                          }} 
+                          style={{ 
+                            width: '100%', 
+                            background: 'var(--accent)',
+                            fontSize: '1rem',
+                            padding: '0.75rem 1.25rem'
+                          }}
+                        >
+                          🚀 Redirect All Players Now
+                        </button>
+                      </>
+                    )}
+                  </div>
+                )}
+
+                {activePromoTab === 'FLYER' && (
+                  <div style={{ textAlign: 'left' }}>
+                    <label style={{ display: 'block', fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>
+                      End-of-Game Flyer / Promo Image (offline-friendly):
+                    </label>
+                    {brandPromoImage && (
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem', background: 'rgba(255,255,255,0.03)', padding: '1rem', borderRadius: '1rem', border: '1px solid rgba(255,255,255,0.05)' }}>
+                        <img src={brandPromoImage} alt="Promo Flyer Preview" style={{ maxHeight: '160px', maxWidth: '100%', objectFit: 'contain', borderRadius: '0.75rem' }} />
+                        
+                        <div style={{ width: '100%', marginTop: '0.5rem', marginBottom: '0.5rem', padding: '0.75rem', background: 'rgba(255,255,255,0.02)', borderRadius: '0.75rem' }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>
-                            <span>Redirect Delay:</span>
-                            <span style={{ fontWeight: 800, color: 'var(--accent)' }}>{redirectDelay} seconds</span>
+                            <span>Flyer Popup Delay:</span>
+                            <span style={{ fontWeight: 800, color: 'var(--accent)' }}>{promoImageDelay} seconds</span>
                           </div>
                           <input 
                             type="range" 
-                            min="5" 
+                            min="0" 
                             max="60" 
                             step="5"
-                            value={redirectDelay} 
+                            value={promoImageDelay} 
                             onChange={e => {
-                              setRedirectDelay(Number(e.target.value));
+                              setPromoImageDelay(Number(e.target.value));
                             }}
                             onMouseUp={e => {
-                              saveRedirectSettings(redirectUrlInput, Number((e.target as HTMLInputElement).value), autoRedirectEnabled);
+                              saveRedirectSettings(redirectUrlInput, redirectDelay, autoRedirectEnabled, brandPromoImage, Number((e.target as HTMLInputElement).value));
                             }}
                             onTouchEnd={e => {
-                              saveRedirectSettings(redirectUrlInput, Number((e.target as HTMLInputElement).value), autoRedirectEnabled);
+                              saveRedirectSettings(redirectUrlInput, redirectDelay, autoRedirectEnabled, brandPromoImage, Number((e.target as HTMLInputElement).value));
                             }}
                             style={{ width: '100%', cursor: 'pointer', accentColor: 'var(--accent)' }}
                           />
                         </div>
-                      )}
-                    </div>
-                    <button 
-                      onClick={() => {
-                        saveRedirectSettings(redirectUrlInput, redirectDelay, autoRedirectEnabled).then(() => {
-                          forceRedirect();
-                        });
-                      }} 
-                      style={{ 
-                        width: '100%', 
-                        background: 'var(--accent)',
-                        fontSize: '1rem',
-                        padding: '0.75rem 1.25rem'
-                      }}
-                    >
-                      🚀 Redirect All Players Now
-                    </button>
-                  </>
-                )}
-              </div>
-            )}
 
-            {activePromoTab === 'FLYER' && (
-              <div style={{ textAlign: 'left' }}>
-                <label style={{ display: 'block', fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>
-                  End-of-Game Flyer / Promo Image (offline-friendly):
-                </label>
-                {brandPromoImage && (
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem', background: 'rgba(255,255,255,0.03)', padding: '1rem', borderRadius: '1rem', border: '1px solid rgba(255,255,255,0.05)' }}>
-                    <img src={brandPromoImage} alt="Promo Flyer Preview" style={{ maxHeight: '160px', maxWidth: '100%', objectFit: 'contain', borderRadius: '0.75rem' }} />
-                    
-                    <div style={{ width: '100%', marginTop: '0.5rem', marginBottom: '0.5rem', padding: '0.75rem', background: 'rgba(255,255,255,0.02)', borderRadius: '0.75rem' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>
-                        <span>Flyer Popup Delay:</span>
-                        <span style={{ fontWeight: 800, color: 'var(--accent)' }}>{promoImageDelay} seconds</span>
+                        <button 
+                          type="button"
+                          onClick={() => {
+                            setBrandPromoImage('');
+                            saveRedirectSettings(redirectUrlInput, redirectDelay, autoRedirectEnabled, '', 0);
+                          }}
+                          style={{ 
+                            background: 'var(--danger)', 
+                            padding: '0.35rem 1rem', 
+                            fontSize: '0.8rem', 
+                            borderRadius: '0.5rem',
+                            boxShadow: 'none',
+                            height: 'auto',
+                            width: 'auto'
+                          }}
+                        >
+                          Remove Flyer
+                        </button>
                       </div>
-                      <input 
-                        type="range" 
-                        min="0" 
-                        max="60" 
-                        step="5"
-                        value={promoImageDelay} 
-                        onChange={e => {
-                          setPromoImageDelay(Number(e.target.value));
-                        }}
-                        onMouseUp={e => {
-                          saveRedirectSettings(redirectUrlInput, redirectDelay, autoRedirectEnabled, brandPromoImage, Number((e.target as HTMLInputElement).value));
-                        }}
-                        onTouchEnd={e => {
-                          saveRedirectSettings(redirectUrlInput, redirectDelay, autoRedirectEnabled, brandPromoImage, Number((e.target as HTMLInputElement).value));
-                        }}
-                        style={{ width: '100%', cursor: 'pointer', accentColor: 'var(--accent)' }}
-                      />
-                    </div>
-
-                    <button 
-                      type="button"
-                      onClick={() => {
-                        setBrandPromoImage('');
-                        saveRedirectSettings(redirectUrlInput, redirectDelay, autoRedirectEnabled, '', 0);
+                    )}
+                    <input 
+                      type="file" 
+                      accept="image/*" 
+                      onChange={e => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        const reader = new FileReader();
+                        reader.onloadend = () => {
+                          const base64 = reader.result as string;
+                          setBrandPromoImage(base64);
+                          saveRedirectSettings(redirectUrlInput, redirectDelay, autoRedirectEnabled, base64);
+                        };
+                        reader.readAsDataURL(file);
                       }}
-                      style={{ 
-                        background: 'var(--danger)', 
-                        padding: '0.35rem 1rem', 
-                        fontSize: '0.8rem', 
-                        borderRadius: '0.5rem',
-                        boxShadow: 'none',
-                        height: 'auto',
-                        width: 'auto'
-                      }}
-                    >
-                      Remove Flyer
-                    </button>
+                      style={{ fontSize: '0.875rem', padding: '0.5rem 0' }}
+                    />
+                    <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: '0.5rem 0 0 0' }}>
+                      If uploaded, this image will pop up on player devices after the delay.
+                    </p>
                   </div>
                 )}
-                <input 
-                  type="file" 
-                  accept="image/*" 
-                  onChange={e => {
-                    const file = e.target.files?.[0];
-                    if (!file) return;
-                    const reader = new FileReader();
-                    reader.onloadend = () => {
-                      const base64 = reader.result as string;
-                      setBrandPromoImage(base64);
-                      saveRedirectSettings(redirectUrlInput, redirectDelay, autoRedirectEnabled, base64);
-                    };
-                    reader.readAsDataURL(file);
-                  }}
-                  style={{ fontSize: '0.875rem', padding: '0.5rem 0' }}
-                />
-                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: '0.5rem 0 0 0' }}>
-                  If uploaded, this image will pop up on player devices after the delay.
-                </p>
               </div>
             )}
+          </div>
+
+          {/* Collapsible QR Code & Join Panel */}
+          <div className="card" style={{ marginTop: '1rem', padding: '1rem 1.25rem', display: 'flex', flexDirection: 'column' }}>
+            <div 
+              onClick={() => setShowQrPanel(!showQrPanel)}
+              style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', userSelect: 'none' }}
+            >
+              <h3 style={{ margin: 0, fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                📱 {showQrPanel ? 'Hide' : 'Show'} Scan to Play QR Code
+              </h3>
+              <span style={{ fontSize: '1rem', color: 'var(--text-muted)' }}>{showQrPanel ? '▲' : '▼'}</span>
+            </div>
+
+            {showQrPanel && (() => {
+              const isLocalHost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+              const joinUrl = isLocalHost
+                ? `${window.location.protocol}//${hostIp}${window.location.port ? `:${window.location.port}` : ''}/?room=${game.room_code}`
+                : `${window.location.protocol}//${window.location.host}/?room=${game.room_code}`;
+              
+              return (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', marginTop: '1.25rem', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '1.25rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'center', width: '100%', marginBottom: '0.5rem' }}>
+                    <button
+                      onClick={() => setShowQrModal(true)}
+                      style={{
+                        padding: '0.35rem 0.75rem',
+                        fontSize: '0.75rem',
+                        background: 'var(--secondary)',
+                        margin: 0,
+                        height: 'auto',
+                        width: 'auto',
+                        boxShadow: 'none'
+                      }}
+                    >
+                      🔍 Zoom Fullscreen
+                    </button>
+                  </div>
+                  <div style={{ background: 'white', padding: '1rem', borderRadius: '1.25rem', display: 'inline-block', margin: '1rem 0', boxShadow: '0 10px 25px -5px rgba(0,0,0,0.3)' }}>
+                    {qrCodeUrl ? (
+                      <img 
+                        src={qrCodeUrl} 
+                        alt="Scan to join" 
+                        style={{ display: 'block', width: '160px', height: '160px' }}
+                      />
+                    ) : (
+                      <div style={{ width: '160px', height: '160px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0d0526' }}>
+                        Generating...
+                      </div>
+                    )}
+                  </div>
+                  <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', wordBreak: 'break-all', margin: 0 }}>
+                    Open this URL on your phone:<br/>
+                    <a href={joinUrl} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent)', fontWeight: 800, textDecoration: 'underline' }}>
+                      {joinUrl}
+                    </a>
+                  </p>
+                </div>
+              );
+            })()}
           </div>
 
           <button 
@@ -2340,58 +2463,6 @@ const AdminDashboard: React.FC = () => {
           >
             Reset Entire Game
           </button>
-        </div>
-      </div>
-
-      <div className="card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginBottom: '0.5rem' }}>
-          <h3 style={{ margin: 0 }}>Scan to Play</h3>
-          <button
-            onClick={() => setShowQrModal(true)}
-            style={{
-              padding: '0.35rem 0.75rem',
-              fontSize: '0.75rem',
-              background: 'var(--secondary)',
-              margin: 0,
-              height: 'auto',
-              width: 'auto',
-              boxShadow: 'none'
-            }}
-          >
-            🔍 Zoom Fullscreen
-          </button>
-        </div>
-        {(() => {
-          const isLocalHost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-          const joinUrl = isLocalHost
-            ? `${window.location.protocol}//${hostIp}${window.location.port ? `:${window.location.port}` : ''}/?room=${game.room_code}`
-            : `${window.location.protocol}//${window.location.host}/?room=${game.room_code}`;
-          
-          return (
-            <>
-              <div style={{ background: 'white', padding: '1rem', borderRadius: '1.25rem', display: 'inline-block', margin: '1rem 0', boxShadow: '0 10px 25px -5px rgba(0,0,0,0.3)' }}>
-                {qrCodeUrl ? (
-                  <img 
-                    src={qrCodeUrl} 
-                    alt="Scan to join" 
-                    style={{ display: 'block', width: '160px', height: '160px' }}
-                  />
-                ) : (
-                  <div style={{ width: '160px', height: '160px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0d0526' }}>
-                    Generating...
-                  </div>
-                )}
-              </div>
-              <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', wordBreak: 'break-all', margin: 0 }}>
-                Open this URL on your phone:<br/>
-                <a href={joinUrl} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent)', fontWeight: 800, textDecoration: 'underline' }}>
-                  {joinUrl}
-                </a>
-              </p>
-            </>
-          );
-        })()}
-      </div>
 
       <div className="card">
         <h3>Live Winners</h3>
@@ -2493,6 +2564,8 @@ const AdminDashboard: React.FC = () => {
           </div>
         );
       })()}
+        </div>
+      </div>
     </div>
   );
 };

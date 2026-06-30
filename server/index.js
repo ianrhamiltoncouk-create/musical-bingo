@@ -291,6 +291,10 @@ app.post('/api/game/create', async (req, res) => {
     const mode = gameMode || 'SINGLE_WINNER';
     const playlistJson = type === 'MUSIC' ? JSON.stringify(DEFAULT_PLAYLIST) : null;
     
+    const targetLineInt = req.body.targetLine !== undefined ? (req.body.targetLine ? 1 : 0) : 1;
+    const targetTwoLinesInt = req.body.targetTwoLines !== undefined ? (req.body.targetTwoLines ? 1 : 0) : 1;
+    const targetFullHouseInt = req.body.targetFullHouse !== undefined ? (req.body.targetFullHouse ? 1 : 0) : 1;
+    
     let anchors = null;
     if (type === 'NUMERIC' && mode === 'PARTY_CLIMAX') {
       const selected = [];
@@ -303,8 +307,8 @@ app.post('/api/game/create', async (req, res) => {
     }
     
     await db.run(
-      'INSERT INTO games (id, status, room_code, playlist, game_type, game_mode, finale_numbers, license_key) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-      [newGameId, 'WAITING', roomCode, playlistJson, type, mode, anchors, license.license_key]
+      'INSERT INTO games (id, status, room_code, playlist, game_type, game_mode, finale_numbers, license_key, target_line, target_two_lines, target_full_house) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [newGameId, 'WAITING', roomCode, playlistJson, type, mode, anchors, license.license_key, targetLineInt, targetTwoLinesInt, targetFullHouseInt]
     );
     const game = await db.get('SELECT * FROM games WHERE id = ?', [newGameId]);
     res.json(game);
@@ -706,19 +710,19 @@ io.on('connection', (socket) => {
                 const card = JSON.parse(player.card_data);
                 const winState = checkWin(card, numbers);
                 
-                if (winState.hasFullHouse && !player.has_full_house) {
+                if (game.target_full_house === 1 && winState.hasFullHouse && !player.has_full_house) {
                   await db.run('UPDATE players SET has_full_house = 1 WHERE id = ?', [player.id]);
                   winners.push({ id: player.id, name: player.name, type: 'FULL_HOUSE' });
                   gameFinished = true;
                 } 
                 
-                if (!lineWinAlreadyOccurred && winState.hasLine && !player.has_line_win) {
+                if (game.target_line === 1 && !lineWinAlreadyOccurred && winState.hasLine && !player.has_line_win) {
                   await db.run('UPDATE players SET has_line_win = 1 WHERE id = ?', [player.id]);
                   winners.push({ id: player.id, name: player.name, type: 'LINE' });
                   lineWinOccurred = true;
                 } 
                 
-                if (!twoLinesWinAlreadyOccurred && lineWinOccurred && winState.hasTwoLines && player.has_line_win !== 2) {
+                if (game.target_two_lines === 1 && !twoLinesWinAlreadyOccurred && (lineWinOccurred || game.target_line !== 1) && winState.hasTwoLines && player.has_line_win !== 2) {
                   await db.run('UPDATE players SET has_line_win = 2 WHERE id = ?', [player.id]);
                   winners.push({ id: player.id, name: player.name, type: 'TWO_LINES' });
                 }
@@ -927,19 +931,19 @@ async function callNumberHelper(gameId, number, io) {
       const card = JSON.parse(player.card_data);
       const winState = checkWin(card, numbers);
       
-      if (winState.hasFullHouse && !player.has_full_house) {
+      if (game.target_full_house === 1 && winState.hasFullHouse && !player.has_full_house) {
         await db.run('UPDATE players SET has_full_house = 1 WHERE id = ?', [player.id]);
         winners.push({ id: player.id, name: player.name, type: 'FULL_HOUSE' });
         gameFinished = true;
       } 
       
-      if (!lineWinAlreadyOccurred && winState.hasLine && !player.has_line_win) {
+      if (game.target_line === 1 && !lineWinAlreadyOccurred && winState.hasLine && !player.has_line_win) {
         await db.run('UPDATE players SET has_line_win = 1 WHERE id = ?', [player.id]);
         winners.push({ id: player.id, name: player.name, type: 'LINE' });
         lineWinOccurred = true;
       } 
       
-      if (!twoLinesWinAlreadyOccurred && lineWinOccurred && winState.hasTwoLines && player.has_line_win !== 2) {
+      if (game.target_two_lines === 1 && !twoLinesWinAlreadyOccurred && (lineWinOccurred || game.target_line !== 1) && winState.hasTwoLines && player.has_line_win !== 2) {
         await db.run('UPDATE players SET has_line_win = 2 WHERE id = ?', [player.id]);
         winners.push({ id: player.id, name: player.name, type: 'TWO_LINES' });
       }
