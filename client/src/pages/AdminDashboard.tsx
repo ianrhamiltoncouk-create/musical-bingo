@@ -77,6 +77,9 @@ const AdminDashboard: React.FC = () => {
   const [spotifyConfigured, setSpotifyConfigured] = useState<boolean>(false);
   const [selectedGameMode, setSelectedGameMode] = useState<'SINGLE_WINNER' | 'PARTY_CLIMAX'>('SINGLE_WINNER');
   const [showAdvancedSpotify, setShowAdvancedSpotify] = useState<boolean>(false);
+  const [activeImportTab, setActiveImportTab] = useState<'SPOTIFY' | 'LOCAL_FILES' | 'TEXT_LIST'>('SPOTIFY');
+  const [activePromoTab, setActivePromoTab] = useState<'REDIRECT' | 'FLYER'>('REDIRECT');
+  const [showQrModal, setShowQrModal] = useState<boolean>(false);
 
   const [licenseVerified, setLicenseVerified] = useState<boolean>(false);
   const [licenseKeyInput, setLicenseKeyInput] = useState<string>('');
@@ -1145,14 +1148,14 @@ const AdminDashboard: React.FC = () => {
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '0.75rem' }}>
                       <input 
                         type="text" 
-                        placeholder="Spotify Client ID" 
+                        placeholder={spotifyConfigured ? "Spotify Client ID (Using global keys, optional override)" : "Spotify Client ID"} 
                         value={spotifyClientId} 
                         onChange={e => setSpotifyClientId(e.target.value)} 
                         style={{ fontSize: '0.8rem', padding: '0.4rem 0.6rem' }}
                       />
                       <input 
                         type="password" 
-                        placeholder="Spotify Client Secret" 
+                        placeholder={spotifyConfigured ? "Spotify Client Secret (Using global keys, optional override)" : "Spotify Client Secret"} 
                         value={spotifyClientSecret} 
                         onChange={e => setSpotifyClientSecret(e.target.value)} 
                         style={{ fontSize: '0.8rem', padding: '0.4rem 0.6rem' }}
@@ -1355,7 +1358,13 @@ const AdminDashboard: React.FC = () => {
             {branding?.logoUrl && (
               <img src={branding.logoUrl} alt="Logo" style={{ height: '36px', maxWidth: '100px', objectFit: 'contain' }} />
             )}
-            <h1 style={{ margin: 0, fontSize: '1.75rem' }}>{branding?.companyName || 'Host Dashboard'}</h1>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', textAlign: 'left' }}>
+              <h1 style={{ margin: 0, fontSize: '1.75rem', lineHeight: '1.2' }}>{branding?.companyName || 'Host Dashboard'}</h1>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem' }}>
+                <span style={{ color: 'var(--text-muted)' }}>Room Code:</span>
+                <strong style={{ color: 'var(--secondary)', letterSpacing: '1px', fontSize: '0.95rem' }}>{game.room_code || '---'}</strong>
+              </div>
+            </div>
           </div>
           <div style={{ display: 'flex', gap: '0.5rem' }}>
             <button 
@@ -1414,25 +1423,46 @@ const AdminDashboard: React.FC = () => {
             </button>
           </div>
         </div>
-        <div className="stats-grid">
-          <div className="stat-box">
-            <div style={{ color: 'var(--text-muted)', fontSize: '0.875rem', marginBottom: '0.5rem' }}>STATUS</div>
-            <div style={{ fontWeight: 800, color: 'var(--accent)' }}>{game.status}</div>
+        
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '1rem',
+          background: 'rgba(255, 255, 255, 0.02)',
+          border: '1px solid rgba(255, 255, 255, 0.05)',
+          padding: '0.75rem 1.25rem',
+          borderRadius: '0.75rem',
+          marginBottom: '1.5rem',
+          flexWrap: 'wrap'
+        }}>
+          {/* Status Indicator */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <span style={{
+              width: '10px',
+              height: '10px',
+              borderRadius: '50%',
+              background: game.status === 'STARTED' || game.status === 'FINALE' 
+                ? '#1db954' 
+                : (game.status === 'FINISHED' ? '#ef4444' : '#f59e0b'),
+              boxShadow: game.status === 'STARTED' || game.status === 'FINALE' 
+                ? '0 0 10px #1db954' 
+                : (game.status === 'FINISHED' ? '0 0 10px #ef4444' : '0 0 10px #f59e0b'),
+              display: 'inline-block'
+            }} />
+            <span style={{ fontSize: '0.85rem', fontWeight: 'bold', textTransform: 'uppercase', color: 'var(--text-muted)' }}>
+              {game.status === 'STARTED' || game.status === 'FINALE' ? 'Active' : game.status === 'FINISHED' ? 'Finished' : 'Waiting'}
+            </span>
           </div>
-          <div className="stat-box">
-            <div style={{ color: 'var(--text-muted)', fontSize: '0.875rem', marginBottom: '0.5rem' }}>CALLED</div>
-            <div style={{ fontWeight: 800 }}>{calledNumbers.length}</div>
+
+          {/* Players count */}
+          <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+            👥 <strong>{Math.max(0, connectedCount - 1)}</strong> / {joinedCount} Players
           </div>
-          <div className="stat-box">
-            <div style={{ color: 'var(--text-muted)', fontSize: '0.875rem', marginBottom: '0.5rem' }}>PLAYERS</div>
-            <div style={{ fontWeight: 800 }}>
-              {Math.max(0, connectedCount - 1)} <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 400 }}>active</span>
-              {' / '}{joinedCount} <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 400 }}>total</span>
-            </div>
-          </div>
-          <div className="stat-box">
-            <div style={{ color: 'var(--text-muted)', fontSize: '0.875rem', marginBottom: '0.5rem' }}>ROOM CODE</div>
-            <div style={{ fontWeight: 800, color: 'var(--secondary)', letterSpacing: '1px' }}>{game.room_code || '---'}</div>
+
+          {/* Called count */}
+          <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+            🔢 <strong>{calledNumbers.length}</strong> Called
           </div>
         </div>
 
@@ -1593,93 +1623,321 @@ const AdminDashboard: React.FC = () => {
                 <>
                   <div style={{
                     background: 'rgba(255,255,255,0.02)',
-                    border: '1px dashed rgba(255,255,255,0.1)',
+                    border: '1px solid rgba(255,255,255,0.05)',
                     padding: '1.25rem',
                     borderRadius: '1rem',
                     marginBottom: '1.25rem',
                     textAlign: 'left'
                   }}>
-                    <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>
-                      🎵 Play Mode Options:
-                    </label>
-                    
-                    {/* Spotify Desktop Sync Option */}
-                    <div style={{ 
-                      display: 'flex', 
-                      alignItems: 'center', 
-                      justifyContent: 'space-between', 
-                      padding: '0.75rem', 
-                      background: 'rgba(29, 185, 84, 0.08)', 
-                      border: '1px solid rgba(29, 185, 84, 0.2)', 
-                      borderRadius: '0.75rem',
-                      marginBottom: '1rem'
-                    }}>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
-                        <span style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#1db954', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                          🟢 Spotify Desktop Sync
-                        </span>
-                        <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-                          Auto-call songs playing on your local Windows Spotify app!
-                        </span>
-                      </div>
-                      <input 
-                        type="checkbox"
-                        checked={spotifySyncEnabled}
-                        onChange={toggleSpotifySync}
-                        style={{ width: '20px', height: '20px', cursor: 'pointer', accentColor: '#1db954' }}
-                        disabled={game?.status !== 'STARTED'}
-                        title={game?.status !== 'STARTED' ? 'Start the game first to enable Spotify Sync' : 'Toggle Spotify Sync'}
-                      />
+                    <div style={{ display: 'flex', gap: '0.25rem', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '0.5rem', marginBottom: '1rem' }}>
+                      <button
+                        onClick={() => setActiveImportTab('SPOTIFY')}
+                        style={{
+                          flex: 1,
+                          fontSize: '0.75rem',
+                          padding: '0.45rem',
+                          background: activeImportTab === 'SPOTIFY' ? '#1db954' : 'rgba(255,255,255,0.05)',
+                          color: 'white',
+                          border: 'none',
+                          boxShadow: 'none',
+                          margin: 0
+                        }}
+                      >
+                        🎵 Spotify Import
+                      </button>
+                      <button
+                        onClick={() => setActiveImportTab('LOCAL_FILES')}
+                        style={{
+                          flex: 1,
+                          fontSize: '0.75rem',
+                          padding: '0.45rem',
+                          background: activeImportTab === 'LOCAL_FILES' ? 'var(--secondary)' : 'rgba(255,255,255,0.05)',
+                          color: 'white',
+                          border: 'none',
+                          boxShadow: 'none',
+                          margin: 0
+                        }}
+                      >
+                        📂 Local Files
+                      </button>
+                      <button
+                        onClick={() => setActiveImportTab('TEXT_LIST')}
+                        style={{
+                          flex: 1,
+                          fontSize: '0.75rem',
+                          padding: '0.45rem',
+                          background: activeImportTab === 'TEXT_LIST' ? 'var(--accent)' : 'rgba(255,255,255,0.05)',
+                          color: 'white',
+                          border: 'none',
+                          boxShadow: 'none',
+                          margin: 0
+                        }}
+                      >
+                        ✍️ Text List
+                      </button>
                     </div>
-                    {audioFiles.length > 0 ? (
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ fontSize: '0.8rem', color: 'var(--success)', fontWeight: 'bold' }}>
-                          ✅ {audioFiles.length} Audio Tracks Loaded
-                        </span>
-                        <button 
-                          onClick={() => {
-                            setAudioFiles([]);
-                            if (audioRef.current) {
-                              audioRef.current.pause();
-                            }
-                            setIsPlaying(false);
-                            setCurrentPlayingId(null);
-                          }}
-                          style={{ background: 'var(--danger)', fontSize: '0.75rem', padding: '0.25rem 0.75rem', height: 'auto', width: 'auto', boxShadow: 'none', margin: 0 }}
-                        >
-                          Clear Tracks
-                        </button>
+
+                    {/* Spotify Tab content */}
+                    {activeImportTab === 'SPOTIFY' && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                        <div style={{
+                          background: 'rgba(29, 185, 84, 0.05)',
+                          border: '1px solid rgba(29, 185, 84, 0.15)',
+                          padding: '0.75rem',
+                          borderRadius: '0.5rem'
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                            <span style={{ fontSize: '0.8rem', fontWeight: 'bold', color: '#1db954' }}>
+                              Spotify Account Connection
+                            </span>
+                            <span style={{ fontSize: '0.7rem' }}>
+                              {spotifyConnected ? <span style={{ color: 'var(--success)', fontWeight: 'bold' }}>Connected ✅</span> : <span style={{ color: 'var(--warning)', fontWeight: 'bold' }}>Disconnected ❌</span>}
+                            </span>
+                          </div>
+                          
+                          <a 
+                            href={`${API_BASE}/api/spotify/login?gameId=${game?.id}`}
+                            className="button"
+                            style={{ 
+                              display: 'block', 
+                              textAlign: 'center', 
+                              background: spotifyConnected ? 'rgba(255,255,255,0.05)' : '#1db954', 
+                              color: 'white', 
+                              fontSize: '0.75rem', 
+                              padding: '0.4rem',
+                              borderRadius: '0.5rem',
+                              fontWeight: 'bold',
+                              border: spotifyConnected ? '1px solid rgba(255,255,255,0.1)' : 'none',
+                              margin: '0 0 0.5rem 0'
+                            }}
+                          >
+                            {spotifyConnected ? '🔄 Re-Connect Spotify Account' : '🔗 Connect Spotify Account'}
+                          </a>
+                        </div>
+
+                        {spotifyConnected ? (
+                          <>
+                            {spotifyPlaylists.length > 0 && (
+                              <div>
+                                <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>
+                                  Choose Playlist from your library:
+                                </label>
+                                <select
+                                  onChange={async (e) => {
+                                    const selectedUrl = e.target.value;
+                                    if (selectedUrl) {
+                                      setSpotifyPlaylistUrl(selectedUrl);
+                                      try {
+                                        const res = await fetch(`${API_BASE}/api/spotify/import`, {
+                                          method: 'POST',
+                                          headers: { 'Content-Type': 'application/json' },
+                                          body: JSON.stringify({
+                                            gameId: game?.id,
+                                            playlistUrl: selectedUrl
+                                          })
+                                        });
+                                        if (res.ok) {
+                                          const data = await res.json();
+                                          alert(`Successfully imported ${data.tracksCount} tracks from Spotify!`);
+                                          await fetchGame(game?.id || '');
+                                        } else {
+                                          const err = await res.json();
+                                          alert(`Failed to import: ${err.error}`);
+                                        }
+                                      } catch (err) {
+                                        console.error(err);
+                                      }
+                                    }
+                                  }}
+                                  style={{
+                                    width: '100%',
+                                    padding: '0.45rem',
+                                    borderRadius: '0.5rem',
+                                    background: 'rgba(0,0,0,0.3)',
+                                    border: '1px solid rgba(255,255,255,0.1)',
+                                    color: 'white',
+                                    fontSize: '0.75rem',
+                                    cursor: 'pointer'
+                                  }}
+                                >
+                                  <option value="">-- Choose Playlist --</option>
+                                  {spotifyPlaylists.map(p => (
+                                    <option key={p.id} value={p.url}>
+                                      {p.name} ({p.tracksCount} songs)
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                            )}
+
+                            <div>
+                              <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>Import Spotify Playlist URL</label>
+                              <div style={{ display: 'flex', gap: '0.35rem' }}>
+                                <input 
+                                  type="text" 
+                                  placeholder="https://open.spotify.com/playlist/..." 
+                                  value={spotifyPlaylistUrl} 
+                                  onChange={e => setSpotifyPlaylistUrl(e.target.value)} 
+                                  style={{ fontSize: '0.75rem', padding: '0.4rem 0.6rem', flex: 1, minWidth: 0 }}
+                                />
+                                <button 
+                                  onClick={importSpotifyPlaylist} 
+                                  style={{ fontSize: '0.75rem', padding: '0.4rem 0.75rem', height: 'auto', background: 'var(--secondary)', border: 'none', margin: 0 }}
+                                >
+                                  Import
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Spotify Desktop Sync Checkbox */}
+                            <div style={{ 
+                              display: 'flex', 
+                              alignItems: 'center', 
+                              justifyContent: 'space-between', 
+                              padding: '0.6rem 0.75rem', 
+                              background: 'rgba(29, 185, 84, 0.08)', 
+                              border: '1px solid rgba(29, 185, 84, 0.2)', 
+                              borderRadius: '0.5rem',
+                              marginTop: '0.5rem'
+                            }}>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
+                                <span style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#1db954', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                                  🟢 Realtime Sync (Optional)
+                                </span>
+                                <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>
+                                  Auto-call matching songs as you play them on Spotify.
+                                </span>
+                              </div>
+                              <input 
+                                type="checkbox"
+                                checked={spotifySyncEnabled}
+                                onChange={toggleSpotifySync}
+                                style={{ width: '18px', height: '18px', cursor: 'pointer', accentColor: '#1db954' }}
+                                disabled={game?.status !== 'STARTED'}
+                                title={game?.status !== 'STARTED' ? 'Start the game first to enable Spotify Sync' : 'Toggle Spotify Sync'}
+                              />
+                            </div>
+                          </>
+                        ) : (
+                          <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textAlign: 'center', padding: '0.5rem' }}>
+                            Please connect your Spotify account using the button above to import playlists.
+                          </div>
+                        )}
                       </div>
-                    ) : (
+                    )}
+
+                    {/* Local Files Tab content */}
+                    {activeImportTab === 'LOCAL_FILES' && (
                       <div>
-                        <input 
-                          type="file" 
-                          multiple 
-                          accept="audio/*" 
-                          onChange={handleAudioFilesChange}
-                          id="audio-selector"
-                          style={{ display: 'none' }}
-                        />
-                        <label 
-                          htmlFor="audio-selector" 
-                          className="button"
+                        {audioFiles.length > 0 ? (
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{ fontSize: '0.8rem', color: 'var(--success)', fontWeight: 'bold' }}>
+                              ✅ {audioFiles.length} Audio Tracks Loaded
+                            </span>
+                            <button 
+                              onClick={() => {
+                                setAudioFiles([]);
+                                if (audioRef.current) {
+                                  audioRef.current.pause();
+                                }
+                                setIsPlaying(false);
+                                setCurrentPlayingId(null);
+                              }}
+                              style={{ background: 'var(--danger)', fontSize: '0.75rem', padding: '0.25rem 0.75rem', height: 'auto', width: 'auto', boxShadow: 'none', margin: 0 }}
+                            >
+                              Clear
+                            </button>
+                          </div>
+                        ) : (
+                          <div>
+                            <input 
+                              type="file" 
+                              multiple 
+                              accept="audio/*" 
+                              onChange={handleAudioFilesChange}
+                              id="audio-selector"
+                              style={{ display: 'none' }}
+                            />
+                            <label 
+                              htmlFor="audio-selector" 
+                              className="button"
+                              style={{ 
+                                display: 'block', 
+                                textAlign: 'center', 
+                                background: 'var(--secondary)', 
+                                padding: '0.6rem 1rem', 
+                                borderRadius: '0.75rem',
+                                fontSize: '0.85rem',
+                                cursor: 'pointer',
+                                fontWeight: 'bold',
+                                margin: 0
+                              }}
+                            >
+                              📂 Load Audio Files (.mp3 / .wav)
+                            </label>
+                            <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', margin: '0.5rem 0 0 0', textAlign: 'center' }}>
+                              Upload actual tracks to play them directly from this dashboard!
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Text List Tab content */}
+                    {activeImportTab === 'TEXT_LIST' && (
+                      <div>
+                        <textarea 
+                          value={playlistInput} 
+                          onChange={e => setPlaylistInput(e.target.value)}
+                          placeholder="Song 1 - Artist 1&#10;Song 2 - Artist 2&#10;Song 3 - Artist 3..."
+                          rows={6}
                           style={{ 
-                            display: 'block', 
-                            textAlign: 'center', 
-                            background: 'var(--secondary)', 
-                            padding: '0.6rem 1rem', 
-                            borderRadius: '0.75rem',
-                            fontSize: '0.85rem',
-                            cursor: 'pointer',
-                            fontWeight: 'bold',
-                            margin: 0
+                            width: '100%', 
+                            background: 'rgba(0,0,0,0.2)', 
+                            border: '1px solid rgba(255,255,255,0.1)', 
+                            borderRadius: '0.5rem', 
+                            color: 'white', 
+                            padding: '0.5rem',
+                            fontFamily: 'monospace',
+                            fontSize: '0.8rem',
+                            resize: 'vertical'
+                          }}
+                        />
+                        <button
+                          onClick={async () => {
+                            const parsed = playlistInput.split('\n').filter(line => line.trim() !== '');
+                            if (parsed.length < 9) {
+                              alert('Please provide at least 9 tracks.');
+                              return;
+                            }
+                            try {
+                              const res = await fetch(`${API_BASE}/api/game/redirect-settings`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                  gameId: game.id,
+                                  playlist: parsed
+                                })
+                              });
+                              if (res.ok) {
+                                alert('Text playlist saved successfully!');
+                                await fetchGame(game.id);
+                              }
+                            } catch (e) {
+                              console.error(e);
+                            }
+                          }}
+                          style={{ 
+                            width: '100%', 
+                            marginTop: '0.5rem', 
+                            fontSize: '0.75rem', 
+                            padding: '0.4rem', 
+                            background: 'var(--accent)',
+                            margin: '0.5rem 0 0 0'
                           }}
                         >
-                          📂 Load Audio Files (.mp3 / .wav)
-                        </label>
-                        <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', margin: '0.5rem 0 0 0', textAlign: 'center' }}>
-                          Upload actual tracks to play them directly from this dashboard!
-                        </p>
+                          💾 Save Text Playlist
+                        </button>
                       </div>
                     )}
                   </div>
@@ -1882,156 +2140,193 @@ const AdminDashboard: React.FC = () => {
             </>
           )}
 
-          <div style={{ marginTop: '2rem', borderTop: '1px solid rgba(255, 255, 255, 0.08)', paddingTop: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-            <div style={{ textAlign: 'left' }}>
-              <label style={{ display: 'block', fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>
-                Optional End of Game Redirect URL:
-              </label>
-              <input 
-                type="text" 
-                value={redirectUrlInput} 
-                onChange={e => setRedirectUrlInput(e.target.value)}
-                onBlur={() => saveRedirectSettings(redirectUrlInput, redirectDelay, autoRedirectEnabled)}
-                placeholder="e.g., https://instagram.com/yourprofile"
-                style={{ width: '100%', marginBottom: '0.75rem' }}
-              />
-              {redirectUrlInput && (
-                <>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '1.25rem', padding: '1rem', background: 'rgba(255,255,255,0.03)', borderRadius: '1rem', border: '1px solid rgba(255,255,255,0.05)' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <label htmlFor="auto-redirect-toggle" style={{ fontSize: '0.875rem', cursor: 'pointer', userSelect: 'none' }}>
-                        Auto-redirect players at game end
-                      </label>
+          <div style={{ marginTop: '2rem', borderTop: '1px solid rgba(255, 255, 255, 0.08)', paddingTop: '1.5rem' }}>
+            <div style={{ display: 'flex', gap: '0.25rem', marginBottom: '1.25rem' }}>
+              <button
+                onClick={() => setActivePromoTab('REDIRECT')}
+                style={{
+                  flex: 1,
+                  fontSize: '0.75rem',
+                  padding: '0.45rem',
+                  background: activePromoTab === 'REDIRECT' ? 'var(--secondary)' : 'rgba(255,255,255,0.05)',
+                  color: 'white',
+                  border: 'none',
+                  boxShadow: 'none',
+                  margin: 0
+                }}
+              >
+                🔗 Auto Redirect URL
+              </button>
+              <button
+                onClick={() => setActivePromoTab('FLYER')}
+                style={{
+                  flex: 1,
+                  fontSize: '0.75rem',
+                  padding: '0.45rem',
+                  background: activePromoTab === 'FLYER' ? 'var(--accent)' : 'rgba(255,255,255,0.05)',
+                  color: 'white',
+                  border: 'none',
+                  boxShadow: 'none',
+                  margin: 0
+                }}
+              >
+                🖼️ Promo Flyer Image
+              </button>
+            </div>
+
+            {activePromoTab === 'REDIRECT' && (
+              <div style={{ textAlign: 'left' }}>
+                <label style={{ display: 'block', fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>
+                  Optional End of Game Redirect URL:
+                </label>
+                <input 
+                  type="text" 
+                  value={redirectUrlInput} 
+                  onChange={e => setRedirectUrlInput(e.target.value)}
+                  onBlur={() => saveRedirectSettings(redirectUrlInput, redirectDelay, autoRedirectEnabled)}
+                  placeholder="e.g., https://instagram.com/yourprofile"
+                  style={{ width: '100%', marginBottom: '0.75rem' }}
+                />
+                {redirectUrlInput && (
+                  <>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '1.25rem', padding: '1rem', background: 'rgba(255,255,255,0.03)', borderRadius: '1rem', border: '1px solid rgba(255,255,255,0.05)' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <label htmlFor="auto-redirect-toggle" style={{ fontSize: '0.875rem', cursor: 'pointer', userSelect: 'none' }}>
+                          Auto-redirect players at game end
+                        </label>
+                        <input 
+                          id="auto-redirect-toggle"
+                          type="checkbox" 
+                          checked={autoRedirectEnabled} 
+                          onChange={e => {
+                            const val = e.target.checked;
+                            setAutoRedirectEnabled(val);
+                            saveRedirectSettings(redirectUrlInput, redirectDelay, val);
+                          }}
+                          style={{ width: '20px', height: '20px', cursor: 'pointer' }}
+                        />
+                      </div>
+
+                      {autoRedirectEnabled && (
+                        <div style={{ marginTop: '0.25rem' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>
+                            <span>Redirect Delay:</span>
+                            <span style={{ fontWeight: 800, color: 'var(--accent)' }}>{redirectDelay} seconds</span>
+                          </div>
+                          <input 
+                            type="range" 
+                            min="5" 
+                            max="60" 
+                            step="5"
+                            value={redirectDelay} 
+                            onChange={e => {
+                              setRedirectDelay(Number(e.target.value));
+                            }}
+                            onMouseUp={e => {
+                              saveRedirectSettings(redirectUrlInput, Number((e.target as HTMLInputElement).value), autoRedirectEnabled);
+                            }}
+                            onTouchEnd={e => {
+                              saveRedirectSettings(redirectUrlInput, Number((e.target as HTMLInputElement).value), autoRedirectEnabled);
+                            }}
+                            style={{ width: '100%', cursor: 'pointer', accentColor: 'var(--accent)' }}
+                          />
+                        </div>
+                      )}
+                    </div>
+                    <button 
+                      onClick={() => {
+                        saveRedirectSettings(redirectUrlInput, redirectDelay, autoRedirectEnabled).then(() => {
+                          forceRedirect();
+                        });
+                      }} 
+                      style={{ 
+                        width: '100%', 
+                        background: 'var(--accent)',
+                        fontSize: '1rem',
+                        padding: '0.75rem 1.25rem'
+                      }}
+                    >
+                      🚀 Redirect All Players Now
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
+
+            {activePromoTab === 'FLYER' && (
+              <div style={{ textAlign: 'left' }}>
+                <label style={{ display: 'block', fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>
+                  End-of-Game Flyer / Promo Image (offline-friendly):
+                </label>
+                {brandPromoImage && (
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem', background: 'rgba(255,255,255,0.03)', padding: '1rem', borderRadius: '1rem', border: '1px solid rgba(255,255,255,0.05)' }}>
+                    <img src={brandPromoImage} alt="Promo Flyer Preview" style={{ maxHeight: '160px', maxWidth: '100%', objectFit: 'contain', borderRadius: '0.75rem' }} />
+                    
+                    <div style={{ width: '100%', marginTop: '0.5rem', marginBottom: '0.5rem', padding: '0.75rem', background: 'rgba(255,255,255,0.02)', borderRadius: '0.75rem' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>
+                        <span>Flyer Popup Delay:</span>
+                        <span style={{ fontWeight: 800, color: 'var(--accent)' }}>{promoImageDelay} seconds</span>
+                      </div>
                       <input 
-                        id="auto-redirect-toggle"
-                        type="checkbox" 
-                        checked={autoRedirectEnabled} 
+                        type="range" 
+                        min="0" 
+                        max="60" 
+                        step="5"
+                        value={promoImageDelay} 
                         onChange={e => {
-                          const val = e.target.checked;
-                          setAutoRedirectEnabled(val);
-                          saveRedirectSettings(redirectUrlInput, redirectDelay, val);
+                          setPromoImageDelay(Number(e.target.value));
                         }}
-                        style={{ width: '20px', height: '20px', cursor: 'pointer' }}
+                        onMouseUp={e => {
+                          saveRedirectSettings(redirectUrlInput, redirectDelay, autoRedirectEnabled, brandPromoImage, Number((e.target as HTMLInputElement).value));
+                        }}
+                        onTouchEnd={e => {
+                          saveRedirectSettings(redirectUrlInput, redirectDelay, autoRedirectEnabled, brandPromoImage, Number((e.target as HTMLInputElement).value));
+                        }}
+                        style={{ width: '100%', cursor: 'pointer', accentColor: 'var(--accent)' }}
                       />
                     </div>
 
-                    {autoRedirectEnabled && (
-                      <div style={{ marginTop: '0.25rem' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>
-                          <span>Redirect Delay:</span>
-                          <span style={{ fontWeight: 800, color: 'var(--accent)' }}>{redirectDelay} seconds</span>
-                        </div>
-                        <input 
-                          type="range" 
-                          min="5" 
-                          max="60" 
-                          step="5"
-                          value={redirectDelay} 
-                          onChange={e => {
-                            setRedirectDelay(Number(e.target.value));
-                          }}
-                          onMouseUp={e => {
-                            saveRedirectSettings(redirectUrlInput, Number((e.target as HTMLInputElement).value), autoRedirectEnabled);
-                          }}
-                          onTouchEnd={e => {
-                            saveRedirectSettings(redirectUrlInput, Number((e.target as HTMLInputElement).value), autoRedirectEnabled);
-                          }}
-                          style={{ width: '100%', cursor: 'pointer', accentColor: 'var(--accent)' }}
-                        />
-                      </div>
-                    )}
+                    <button 
+                      type="button"
+                      onClick={() => {
+                        setBrandPromoImage('');
+                        saveRedirectSettings(redirectUrlInput, redirectDelay, autoRedirectEnabled, '', 0);
+                      }}
+                      style={{ 
+                        background: 'var(--danger)', 
+                        padding: '0.35rem 1rem', 
+                        fontSize: '0.8rem', 
+                        borderRadius: '0.5rem',
+                        boxShadow: 'none',
+                        height: 'auto',
+                        width: 'auto'
+                      }}
+                    >
+                      Remove Flyer
+                    </button>
                   </div>
-                  <button 
-                    onClick={() => {
-                      saveRedirectSettings(redirectUrlInput, redirectDelay, autoRedirectEnabled).then(() => {
-                        forceRedirect();
-                      });
-                    }} 
-                    style={{ 
-                      width: '100%', 
-                      background: 'var(--accent)',
-                      fontSize: '1rem',
-                      padding: '0.75rem 1.25rem'
-                    }}
-                  >
-                    🚀 Redirect All Players Now
-                  </button>
-                </>
-              )}
-            </div>
-
-            <div style={{ borderTop: '1px solid rgba(255, 255, 255, 0.05)', paddingTop: '1.25rem', textAlign: 'left' }}>
-              <label style={{ display: 'block', fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>
-                End-of-Game Flyer / Promo Image (offline-friendly):
-              </label>
-              {brandPromoImage && (
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem', background: 'rgba(255,255,255,0.03)', padding: '1rem', borderRadius: '1rem', border: '1px solid rgba(255,255,255,0.05)' }}>
-                  <img src={brandPromoImage} alt="Promo Flyer Preview" style={{ maxHeight: '160px', maxWidth: '100%', objectFit: 'contain', borderRadius: '0.75rem' }} />
-                  
-                  <div style={{ width: '100%', marginTop: '0.5rem', marginBottom: '0.5rem', padding: '0.75rem', background: 'rgba(255,255,255,0.02)', borderRadius: '0.75rem' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>
-                      <span>Flyer Popup Delay:</span>
-                      <span style={{ fontWeight: 800, color: 'var(--accent)' }}>{promoImageDelay} seconds</span>
-                    </div>
-                    <input 
-                      type="range" 
-                      min="0" 
-                      max="60" 
-                      step="5"
-                      value={promoImageDelay} 
-                      onChange={e => {
-                        setPromoImageDelay(Number(e.target.value));
-                      }}
-                      onMouseUp={e => {
-                        saveRedirectSettings(redirectUrlInput, redirectDelay, autoRedirectEnabled, brandPromoImage, Number((e.target as HTMLInputElement).value));
-                      }}
-                      onTouchEnd={e => {
-                        saveRedirectSettings(redirectUrlInput, redirectDelay, autoRedirectEnabled, brandPromoImage, Number((e.target as HTMLInputElement).value));
-                      }}
-                      style={{ width: '100%', cursor: 'pointer', accentColor: 'var(--accent)' }}
-                    />
-                  </div>
-
-                  <button 
-                    type="button"
-                    onClick={() => {
-                      setBrandPromoImage('');
-                      saveRedirectSettings(redirectUrlInput, redirectDelay, autoRedirectEnabled, '', 0);
-                    }}
-                    style={{ 
-                      background: 'var(--danger)', 
-                      padding: '0.35rem 1rem', 
-                      fontSize: '0.8rem', 
-                      borderRadius: '0.5rem',
-                      boxShadow: 'none',
-                      height: 'auto',
-                      width: 'auto'
-                    }}
-                  >
-                    Remove Flyer
-                  </button>
-                </div>
-              )}
-              <input 
-                type="file" 
-                accept="image/*" 
-                onChange={e => {
-                  const file = e.target.files?.[0];
-                  if (!file) return;
-                  const reader = new FileReader();
-                  reader.onloadend = () => {
-                    const base64 = reader.result as string;
-                    setBrandPromoImage(base64);
-                    saveRedirectSettings(redirectUrlInput, redirectDelay, autoRedirectEnabled, base64);
-                  };
-                  reader.readAsDataURL(file);
-                }}
-                style={{ fontSize: '0.875rem', padding: '0.5rem 0' }}
-              />
-              <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: '0.5rem 0 0 0' }}>
-                If uploaded, this image will pop up on player devices after the delay.
-              </p>
-            </div>
+                )}
+                <input 
+                  type="file" 
+                  accept="image/*" 
+                  onChange={e => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    const reader = new FileReader();
+                    reader.onloadend = () => {
+                      const base64 = reader.result as string;
+                      setBrandPromoImage(base64);
+                      saveRedirectSettings(redirectUrlInput, redirectDelay, autoRedirectEnabled, base64);
+                    };
+                    reader.readAsDataURL(file);
+                  }}
+                  style={{ fontSize: '0.875rem', padding: '0.5rem 0' }}
+                />
+                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: '0.5rem 0 0 0' }}>
+                  If uploaded, this image will pop up on player devices after the delay.
+                </p>
+              </div>
+            )}
           </div>
 
           <button 
@@ -2049,7 +2344,23 @@ const AdminDashboard: React.FC = () => {
       </div>
 
       <div className="card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
-        <h3>Scan to Play</h3>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginBottom: '0.5rem' }}>
+          <h3 style={{ margin: 0 }}>Scan to Play</h3>
+          <button
+            onClick={() => setShowQrModal(true)}
+            style={{
+              padding: '0.35rem 0.75rem',
+              fontSize: '0.75rem',
+              background: 'var(--secondary)',
+              margin: 0,
+              height: 'auto',
+              width: 'auto',
+              boxShadow: 'none'
+            }}
+          >
+            🔍 Zoom Fullscreen
+          </button>
+        </div>
         {(() => {
           const isLocalHost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
           const joinUrl = isLocalHost
@@ -2100,6 +2411,88 @@ const AdminDashboard: React.FC = () => {
           ))}
         </div>
       </div>
+
+      {/* Fullscreen QR Modal Overlay */}
+      {showQrModal && (() => {
+        const isLocalHost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+        const joinUrl = isLocalHost
+          ? `${window.location.protocol}//${hostIp}${window.location.port ? `:${window.location.port}` : ''}/?room=${game.room_code}`
+          : `${window.location.protocol}//${window.location.host}/?room=${game.room_code}`;
+        
+        return (
+          <div style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            width: '100vw',
+            height: '100vh',
+            background: 'rgba(13, 5, 38, 0.98)',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'center',
+            alignItems: 'center',
+            zIndex: 99999,
+            padding: '2rem'
+          }}>
+            <h1 style={{ color: 'white', marginBottom: '0.5rem', fontWeight: 900, fontSize: '2.5rem', textShadow: '0 0 20px rgba(99,102,241,0.5)' }}>
+              Join the Game!
+            </h1>
+            <p style={{ color: 'var(--text-muted)', fontSize: '1.25rem', marginBottom: '2rem' }}>
+              Scan the QR code below or visit the URL to get your card:
+            </p>
+
+            <div style={{
+              background: 'white',
+              padding: '2rem',
+              borderRadius: '2rem',
+              boxShadow: '0 15px 50px rgba(0, 0, 0, 0.8)',
+              marginBottom: '2rem'
+            }}>
+              {qrCodeUrl ? (
+                <img 
+                  src={qrCodeUrl} 
+                  alt="Scan to join" 
+                  style={{ display: 'block', width: '320px', height: '320px' }}
+                />
+              ) : (
+                <div style={{ width: '320px', height: '320px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0d0526', fontSize: '1.25rem', fontWeight: 'bold' }}>
+                  Generating QR Code...
+                </div>
+              )}
+            </div>
+
+            <div style={{
+              fontSize: '1.5rem',
+              fontFamily: 'monospace',
+              color: 'var(--accent)',
+              fontWeight: 900,
+              background: 'rgba(255,255,255,0.03)',
+              padding: '0.75rem 1.5rem',
+              borderRadius: '1rem',
+              border: '1px solid rgba(255,255,255,0.05)',
+              marginBottom: '3rem',
+              textAlign: 'center',
+              wordBreak: 'break-all'
+            }}>
+              {joinUrl}
+            </div>
+
+            <button
+              onClick={() => setShowQrModal(false)}
+              style={{
+                background: 'var(--danger)',
+                fontSize: '1.2rem',
+                padding: '0.75rem 2rem',
+                borderRadius: '1rem',
+                fontWeight: 'bold',
+                cursor: 'pointer'
+              }}
+            >
+              ✕ Close Display
+            </button>
+          </div>
+        );
+      })()}
     </div>
   );
 };
