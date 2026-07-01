@@ -9,6 +9,7 @@ const { generateMusicalCard, generatePartyClimaxCard, checkWin } = require('./bi
 const { exec } = require('child_process');
 
 const app = express();
+app.set('trust proxy', true);
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
@@ -461,7 +462,9 @@ app.get('/api/spotify/login', async (req, res) => {
       return res.status(400).send('Please configure Spotify Client ID in server environment variables or game settings.');
     }
     
-    const redirectUri = `${req.protocol}://${req.headers.host}/api/spotify/callback`;
+    const redirectUri = req.headers.host.includes('localhost') || req.headers.host.includes('127.0.0.1')
+      ? `http://${req.headers.host}/api/spotify/callback`
+      : `https://${req.headers.host}/api/spotify/callback`;
     const scopes = 'user-modify-playback-state user-read-playback-state playlist-read-private playlist-read-collaborative';
     
     const spotifyAuthUrl = `https://accounts.spotify.com/authorize?client_id=${clientId}&response_type=code&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scopes)}&state=${gameId}`;
@@ -487,7 +490,9 @@ app.get('/api/spotify/callback', async (req, res) => {
       return res.status(400).send('Spotify credentials not configured.');
     }
     
-    const redirectUri = `${req.protocol}://${req.headers.host}/api/spotify/callback`;
+    const redirectUri = req.headers.host.includes('localhost') || req.headers.host.includes('127.0.0.1')
+      ? `http://${req.headers.host}/api/spotify/callback`
+      : `https://${req.headers.host}/api/spotify/callback`;
     const authHeader = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
     
     const params = new URLSearchParams();
