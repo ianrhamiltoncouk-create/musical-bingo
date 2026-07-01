@@ -462,9 +462,16 @@ app.get('/api/spotify/login', async (req, res) => {
       return res.status(400).send('Please configure Spotify Client ID in server environment variables or game settings.');
     }
     
-    const redirectUri = req.headers.host.includes('localhost') || req.headers.host.includes('127.0.0.1')
+    const isLocal = req.headers.host.includes('localhost') || 
+                    req.headers.host.includes('127.0.0.1') || 
+                    req.headers.host.includes('192.168.') || 
+                    req.headers.host.startsWith('10.') || 
+                    req.headers.host.startsWith('172.');
+    const redirectUri = isLocal
       ? `http://${req.headers.host}/api/spotify/callback`
       : `https://${req.headers.host}/api/spotify/callback`;
+    
+    console.log('[Spotify Login] Generated redirect URI:', redirectUri);
     const scopes = 'user-modify-playback-state user-read-playback-state playlist-read-private playlist-read-collaborative';
     
     const spotifyAuthUrl = `https://accounts.spotify.com/authorize?client_id=${clientId}&response_type=code&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scopes)}&state=${gameId}`;
@@ -490,9 +497,15 @@ app.get('/api/spotify/callback', async (req, res) => {
       return res.status(400).send('Spotify credentials not configured.');
     }
     
-    const redirectUri = req.headers.host.includes('localhost') || req.headers.host.includes('127.0.0.1')
+    const isLocal = req.headers.host.includes('localhost') || 
+                    req.headers.host.includes('127.0.0.1') || 
+                    req.headers.host.includes('192.168.') || 
+                    req.headers.host.startsWith('10.') || 
+                    req.headers.host.startsWith('172.');
+    const redirectUri = isLocal
       ? `http://${req.headers.host}/api/spotify/callback`
       : `https://${req.headers.host}/api/spotify/callback`;
+    console.log('[Spotify Callback] Matching redirect URI:', redirectUri);
     const authHeader = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
     
     const params = new URLSearchParams();
