@@ -462,7 +462,11 @@ app.get('/api/spotify/login', async (req, res) => {
       return res.status(400).send('Please configure Spotify Client ID in server environment variables or game settings.');
     }
     
-    const redirectUri = `${req.protocol}://${req.get('host')}/api/spotify/callback`;
+    let reqHost = req.get('host') || '';
+    if (reqHost.includes('localhost')) {
+      reqHost = reqHost.replace('localhost', '127.0.0.1');
+    }
+    const redirectUri = `${req.protocol}://${reqHost}/api/spotify/callback`;
     
     console.log('[Spotify Login] Generated redirect URI:', redirectUri);
     const scopes = 'user-modify-playback-state user-read-playback-state playlist-read-private playlist-read-collaborative';
@@ -490,7 +494,11 @@ app.get('/api/spotify/callback', async (req, res) => {
       return res.status(400).send('Spotify credentials not configured.');
     }
     
-    const redirectUri = `${req.protocol}://${req.get('host')}/api/spotify/callback`;
+    let reqHost = req.get('host') || '';
+    if (reqHost.includes('localhost')) {
+      reqHost = reqHost.replace('localhost', '127.0.0.1');
+    }
+    const redirectUri = `${req.protocol}://${reqHost}/api/spotify/callback`;
     console.log('[Spotify Callback] Matching redirect URI:', redirectUri);
     const authHeader = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
     
