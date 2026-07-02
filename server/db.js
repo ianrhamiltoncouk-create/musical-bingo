@@ -19,6 +19,12 @@ async function initDb() {
       game_type TEXT DEFAULT 'MUSIC', -- MUSIC, NUMERIC
       finale_numbers TEXT, -- JSON array
       redirect_url TEXT,
+      grid_size INTEGER DEFAULT 3,
+      free_space_enabled INTEGER DEFAULT 0,
+      time_limit_enabled INTEGER DEFAULT 0,
+      duration_limit INTEGER DEFAULT 15,
+      snippet_limit INTEGER DEFAULT 30,
+      target_winner_step INTEGER DEFAULT 30,
       target_line INTEGER DEFAULT 1,
       target_two_lines INTEGER DEFAULT 1,
       target_full_house INTEGER DEFAULT 1,
@@ -139,6 +145,24 @@ async function initDb() {
   } catch (e) {}
   try {
     await db.exec(`ALTER TABLE games ADD COLUMN target_full_house INTEGER DEFAULT 1;`);
+  } catch (e) {}
+  try {
+    await db.exec(`ALTER TABLE games ADD COLUMN grid_size INTEGER DEFAULT 3;`);
+  } catch (e) {}
+  try {
+    await db.exec(`ALTER TABLE games ADD COLUMN free_space_enabled INTEGER DEFAULT 0;`);
+  } catch (e) {}
+  try {
+    await db.exec(`ALTER TABLE games ADD COLUMN time_limit_enabled INTEGER DEFAULT 0;`);
+  } catch (e) {}
+  try {
+    await db.exec(`ALTER TABLE games ADD COLUMN duration_limit INTEGER DEFAULT 15;`);
+  } catch (e) {}
+  try {
+    await db.exec(`ALTER TABLE games ADD COLUMN snippet_limit INTEGER DEFAULT 30;`);
+  } catch (e) {}
+  try {
+    await db.exec(`ALTER TABLE games ADD COLUMN target_winner_step INTEGER DEFAULT 30;`);
   } catch (e) {}
 
   // Seed a default trial license key for testing

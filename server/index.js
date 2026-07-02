@@ -262,7 +262,17 @@ app.post('/api/branding', async (req, res) => {
 
 // Create a new game room with default playlist
 app.post('/api/game/create', async (req, res) => {
-  const { gameType, gameMode, licenseKey, deviceId } = req.body;
+  const { 
+    gameType, 
+    gameMode, 
+    licenseKey, 
+    deviceId,
+    gridSize,
+    freeSpaceEnabled,
+    timeLimitEnabled,
+    durationLimit,
+    snippetLimit
+  } = req.body;
   const db = getDb();
 
   // Validate license
@@ -296,6 +306,13 @@ app.post('/api/game/create', async (req, res) => {
     const targetTwoLinesInt = req.body.targetTwoLines !== undefined ? (req.body.targetTwoLines ? 1 : 0) : 1;
     const targetFullHouseInt = req.body.targetFullHouse !== undefined ? (req.body.targetFullHouse ? 1 : 0) : 1;
     
+    const gridSz = gridSize !== undefined ? Number(gridSize) : 3;
+    const freeSp = freeSpaceEnabled ? 1 : 0;
+    const timeLim = timeLimitEnabled ? 1 : 0;
+    const durLim = durationLimit !== undefined ? Number(durationLimit) : 15;
+    const snipLim = snippetLimit !== undefined ? Number(snippetLimit) : 30;
+    const targetWinStep = Math.max(1, Math.round((durLim * 60) / snipLim));
+
     let anchors = null;
     if (type === 'NUMERIC' && mode === 'PARTY_CLIMAX') {
       const selected = [];
@@ -308,8 +325,8 @@ app.post('/api/game/create', async (req, res) => {
     }
     
     await db.run(
-      'INSERT INTO games (id, status, room_code, playlist, game_type, game_mode, finale_numbers, license_key, target_line, target_two_lines, target_full_house) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [newGameId, 'WAITING', roomCode, playlistJson, type, mode, anchors, license.license_key, targetLineInt, targetTwoLinesInt, targetFullHouseInt]
+      'INSERT INTO games (id, status, room_code, playlist, game_type, game_mode, finale_numbers, license_key, target_line, target_two_lines, target_full_house, grid_size, free_space_enabled, time_limit_enabled, duration_limit, snippet_limit, target_winner_step) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [newGameId, 'WAITING', roomCode, playlistJson, type, mode, anchors, license.license_key, targetLineInt, targetTwoLinesInt, targetFullHouseInt, gridSz, freeSp, timeLim, durLim, snipLim, targetWinStep]
     );
     const game = await db.get('SELECT * FROM games WHERE id = ?', [newGameId]);
     res.json(game);
@@ -661,17 +678,19 @@ app.post('/api/game/join', async (req, res) => {
   const playlist = JSON.parse(game.playlist || '[]');
   const playlistSize = playlist.length || 50;
   
-  // Generate 3x3 card depending on game type and mode
+  // Generate card depending on game type, mode, grid size and free space
+  const gridSz = game.grid_size || 3;
+  const freeSp = !!game.free_space_enabled;
   let card;
   if (game.game_type === 'NUMERIC') {
     if (game.game_mode === 'PARTY_CLIMAX') {
       const anchors = JSON.parse(game.finale_numbers || '[]');
-      card = generatePartyClimaxCard(90, anchors);
+      card = generatePartyClimaxCard(90, anchors, gridSz, freeSp);
     } else {
-      card = generateMusicalCard(90);
+      card = generateMusicalCard(90, gridSz, freeSp);
     }
   } else {
-    card = generateMusicalCard(playlistSize);
+    card = generateMusicalCard(playlistSize, gridSz, freeSp);
   }
   const sessionToken = uuidv4();
 
@@ -902,7 +921,7 @@ io.on('connection', (socket) => {
     players.forEach(p => {
       if (p.id === winnerPlayer.id) return;
       const card = JSON.parse(p.card_data);
-      const flatCard = card.flat();
+      const flatCard = card.flat().filter(num => typeof num === 'number');
       const uncalledOnCard = flatCard.filter(num => !alreadyCalled.has(num));
       if (uncalledOnCard.length === 1) {
         forbidden.add(uncalledOnCard[0]);
@@ -911,42 +930,121 @@ io.on('connection', (socket) => {
 
     const winnerCard = JSON.parse(winnerPlayer.card_data);
     const winnerFlat = winnerCard.flat();
-    const winnerUncalled = winnerFlat.filter(num => !alreadyCalled.has(num) && !forbidden.has(num));
+    const winnerFlatClean = winnerFlat.filter(num => typeof num === 'number');
+    const winnerUncalledClean = winnerFlatClean.filter(num => !alreadyCalled.has(num));
+    const winnerUncalledSafe = winnerUncalledClean.filter(num => !forbidden.has(num));
 
     let suggestion;
-    if (winnerUncalled.length > 0) {
-      // 70% chance to progress the target winner, 30% chance to progress others (within non-forbidden safety limits)
-      if (Math.random() < 0.7) {
-        suggestion = winnerUncalled[Math.floor(Math.random() * winnerUncalled.length)];
-      } else {
-        const otherUncalled = [];
-        players.forEach(p => {
-          if (p.id === winnerPlayer.id) return;
-          const card = JSON.parse(p.card_data);
-          card.flat().forEach(num => {
-            if (!alreadyCalled.has(num) && !forbidden.has(num) && !winnerFlat.includes(num)) {
-              otherUncalled.push(num);
-            }
-          });
-        });
+    const timeLimitEnabled = game.time_limit_enabled === 1;
+    const targetWinnerStep = game.target_winner_step || 30;
+    const currentStep = alreadyCalled.size + 1;
 
-        if (otherUncalled.length > 0) {
-          suggestion = otherUncalled[Math.floor(Math.random() * otherUncalled.length)];
+    if (timeLimitEnabled) {
+      const totalWinnerNumbersToCall = winnerFlatClean.length;
+      // The locked climax winning number (select the last uncalled number dynamically)
+      const winningNumber = winnerUncalledClean[winnerUncalledClean.length - 1];
+
+      if (currentStep >= targetWinnerStep) {
+        // Time is up! Suggest the winning number to complete the card.
+        if (winningNumber !== undefined) {
+          suggestion = winningNumber;
         } else {
-          suggestion = winnerUncalled[Math.floor(Math.random() * winnerUncalled.length)];
+          // Fallback if winning number was already called
+          const uncalled = [];
+          for (let i = 1; i <= maxRange; i++) {
+            if (!alreadyCalled.has(i)) uncalled.push(i);
+          }
+          suggestion = uncalled.length > 0 ? uncalled[Math.floor(Math.random() * uncalled.length)] : 1;
+        }
+      } else {
+        // Calculate how many numbers the winner should have called at this stage
+        const targetWinnerCalledCount = Math.min(
+          totalWinnerNumbersToCall - 1,
+          Math.floor(((totalWinnerNumbersToCall - 1) * currentStep) / (targetWinnerStep - 1))
+        );
+        const winnerCurrentlyCalled = winnerFlatClean.filter(num => alreadyCalled.has(num)).length;
+
+        if (winnerCurrentlyCalled < targetWinnerCalledCount) {
+          // Progress the winner: call an uncalled number that is NOT the locked winningNumber
+          const allowedUncalled = winnerUncalledSafe.filter(num => num !== winningNumber);
+          if (allowedUncalled.length > 0) {
+            suggestion = allowedUncalled[Math.floor(Math.random() * allowedUncalled.length)];
+          } else {
+            // No safe non-climax numbers left, progress anyway
+            const allowedAny = winnerUncalledClean.filter(num => num !== winningNumber);
+            if (allowedAny.length > 0) {
+              suggestion = allowedAny[Math.floor(Math.random() * allowedAny.length)];
+            } else {
+              suggestion = winningNumber;
+            }
+          }
+        } else {
+          // Call a dummy/filler number (not on the winner's card) to delay the win
+          const dummyUncalled = [];
+          for (let i = 1; i <= maxRange; i++) {
+            if (!alreadyCalled.has(i) && !winnerFlatClean.includes(i) && !forbidden.has(i)) {
+              dummyUncalled.push(i);
+            }
+          }
+
+          if (dummyUncalled.length > 0) {
+            suggestion = dummyUncalled[Math.floor(Math.random() * dummyUncalled.length)];
+          } else {
+            // Fallback: call any safe uncalled number (excluding winningNumber)
+            const safeUncalled = [];
+            for (let i = 1; i <= maxRange; i++) {
+              if (!alreadyCalled.has(i) && !forbidden.has(i) && i !== winningNumber) {
+                safeUncalled.push(i);
+              }
+            }
+            if (safeUncalled.length > 0) {
+              suggestion = safeUncalled[Math.floor(Math.random() * safeUncalled.length)];
+            } else {
+              // Complete fallback
+              const uncalled = [];
+              for (let i = 1; i <= maxRange; i++) {
+                if (!alreadyCalled.has(i)) uncalled.push(i);
+              }
+              suggestion = uncalled.length > 0 ? uncalled[Math.floor(Math.random() * uncalled.length)] : 1;
+            }
+          }
         }
       }
     } else {
-      // Force winner progress if winner has no other safe moves
-      const winnerRemaining = winnerFlat.filter(num => !alreadyCalled.has(num));
-      if (winnerRemaining.length > 0) {
-        suggestion = winnerRemaining[Math.floor(Math.random() * winnerRemaining.length)];
-      } else {
-        const uncalled = [];
-        for (let i = 1; i <= maxRange; i++) {
-          if (!alreadyCalled.has(i)) uncalled.push(i);
+      // Normal smart suggestion logic (no duration limit)
+      if (winnerUncalledSafe.length > 0) {
+        // 70% chance to progress the target winner, 30% chance to progress others (within safety limits)
+        if (Math.random() < 0.7) {
+          suggestion = winnerUncalledSafe[Math.floor(Math.random() * winnerUncalledSafe.length)];
+        } else {
+          const otherUncalled = [];
+          players.forEach(p => {
+            if (p.id === winnerPlayer.id) return;
+            const card = JSON.parse(p.card_data);
+            card.flat().filter(num => typeof num === 'number').forEach(num => {
+              if (!alreadyCalled.has(num) && !forbidden.has(num) && !winnerFlatClean.includes(num)) {
+                otherUncalled.push(num);
+              }
+            });
+          });
+
+          if (otherUncalled.length > 0) {
+            suggestion = otherUncalled[Math.floor(Math.random() * otherUncalled.length)];
+          } else {
+            suggestion = winnerUncalledSafe[Math.floor(Math.random() * winnerUncalledSafe.length)];
+          }
         }
-        suggestion = uncalled.length > 0 ? uncalled[Math.floor(Math.random() * uncalled.length)] : 1;
+      } else {
+        // Force winner progress if winner has no other safe moves
+        if (winnerUncalledClean.length > 0) {
+          suggestion = winnerUncalledClean[Math.floor(Math.random() * winnerUncalledClean.length)];
+        } else {
+          const uncalled = [];
+          for (let i = 1; i <= maxRange; i++) {
+            if (!alreadyCalled.has(i)) uncalled.push(i);
+          }
+          suggestion = uncalled.length > 0 ? uncalled[Math.floor(Math.random() * uncalled.length)] : 1;
+        }
       }
     }
 

@@ -38,10 +38,10 @@ const GamePage: React.FC = () => {
     const saved = sessionStorage.getItem('bingo_player');
     if (saved) {
       const data = JSON.parse(saved);
-      const hasFree = data.card.flat().some((cell: any) => cell === 'FREE');
-      const isWrongSize = data.card.length !== 3 || data.card[0].length !== 3;
+      const size = data.card.length;
+      const isWrongSize = (size !== 3 && size !== 4) || data.card.some((row: any) => row.length !== size);
       
-      if (hasFree || isWrongSize) {
+      if (isWrongSize) {
         sessionStorage.removeItem('bingo_player');
         window.location.href = '/';
         return;

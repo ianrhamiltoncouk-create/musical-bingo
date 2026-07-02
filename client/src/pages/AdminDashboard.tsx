@@ -85,6 +85,11 @@ const AdminDashboard: React.FC = () => {
   const [targetFullHouse, setTargetFullHouse] = useState<boolean>(true);
   const [showQrPanel, setShowQrPanel] = useState<boolean>(false);
   const [showPromoPanel, setShowPromoPanel] = useState<boolean>(false);
+  const [gridSize, setGridSize] = useState<number>(3);
+  const [freeSpaceEnabled, setFreeSpaceEnabled] = useState<boolean>(false);
+  const [timeLimitEnabled, setTimeLimitEnabled] = useState<boolean>(false);
+  const [durationLimit, setDurationLimit] = useState<number>(15);
+  const [snippetLimit, setSnippetLimit] = useState<number>(30);
 
   const [licenseVerified, setLicenseVerified] = useState<boolean>(false);
   const [licenseKeyInput, setLicenseKeyInput] = useState<string>('');
@@ -427,7 +432,12 @@ const AdminDashboard: React.FC = () => {
           deviceId: deviceId,
           targetLine,
           targetTwoLines,
-          targetFullHouse
+          targetFullHouse,
+          gridSize,
+          freeSpaceEnabled,
+          timeLimitEnabled,
+          durationLimit,
+          snippetLimit
         })
       });
       if (res.ok) {
@@ -895,6 +905,83 @@ const AdminDashboard: React.FC = () => {
             </select>
           </div>
         )}
+
+        {/* Card Options */}
+        <div style={{ textAlign: 'left', marginBottom: '1.25rem', display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+          <div style={{ flex: 1, minWidth: '150px' }}>
+            <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 'bold', marginBottom: '0.5rem', color: 'var(--text-muted)' }}>Grid Size:</label>
+            <select
+              value={gridSize}
+              onChange={e => setGridSize(Number(e.target.value))}
+              style={{ width: '100%', padding: '0.75rem', borderRadius: '0.5rem', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'white', cursor: 'pointer' }}
+            >
+              <option value={3} style={{ background: '#1c1b22' }}>3x3 Grid (9 slots)</option>
+              <option value={4} style={{ background: '#1c1b22' }}>4x4 Grid (16 slots)</option>
+            </select>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'flex-end', paddingBottom: '0.65rem' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.9rem', userSelect: 'none' }}>
+              <input
+                type="checkbox"
+                checked={freeSpaceEnabled}
+                onChange={e => setFreeSpaceEnabled(e.target.checked)}
+                style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+              />
+              Include 'FREE' center space
+            </label>
+          </div>
+        </div>
+
+        {/* Target Time Limit */}
+        <div style={{ textAlign: 'left', marginBottom: '1.25rem', background: 'rgba(255,255,255,0.02)', padding: '1rem', borderRadius: '0.75rem', border: '1px solid rgba(255,255,255,0.05)' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.9rem', fontWeight: 'bold', userSelect: 'none', marginBottom: timeLimitEnabled ? '0.75rem' : 0 }}>
+            <input
+              type="checkbox"
+              checked={timeLimitEnabled}
+              onChange={e => setTimeLimitEnabled(e.target.checked)}
+              style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+            />
+            ⏰ Set Target Game Duration
+          </label>
+          
+          {timeLimitEnabled && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginTop: '0.5rem' }}>
+              <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+                <div style={{ flex: 1, minWidth: '100px' }}>
+                  <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.35rem' }}>Target Length:</label>
+                  <select
+                    value={durationLimit}
+                    onChange={e => setDurationLimit(Number(e.target.value))}
+                    style={{ width: '100%', padding: '0.5rem', borderRadius: '0.35rem', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'white' }}
+                  >
+                    <option value={5} style={{ background: '#1c1b22' }}>5 Mins (Fast)</option>
+                    <option value={10} style={{ background: '#1c1b22' }}>10 Mins</option>
+                    <option value={15} style={{ background: '#1c1b22' }}>15 Mins (Default)</option>
+                    <option value={20} style={{ background: '#1c1b22' }}>20 Mins</option>
+                    <option value={30} style={{ background: '#1c1b22' }}>30 Mins</option>
+                    <option value={45} style={{ background: '#1c1b22' }}>45 Mins</option>
+                  </select>
+                </div>
+                <div style={{ flex: 1, minWidth: '100px' }}>
+                  <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.35rem' }}>Secs per Song:</label>
+                  <select
+                    value={snippetLimit}
+                    onChange={e => setSnippetLimit(Number(e.target.value))}
+                    style={{ width: '100%', padding: '0.5rem', borderRadius: '0.35rem', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'white' }}
+                  >
+                    <option value={20} style={{ background: '#1c1b22' }}>20s Snippets</option>
+                    <option value={30} style={{ background: '#1c1b22' }}>30s Snippets</option>
+                    <option value={45} style={{ background: '#1c1b22' }}>45s Snippets</option>
+                    <option value={60} style={{ background: '#1c1b22' }}>60s Snippets</option>
+                  </select>
+                </div>
+              </div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--accent)', background: 'rgba(255,255,255,0.02)', padding: '0.5rem 0.75rem', borderRadius: '0.5rem', border: '1px solid rgba(255,255,255,0.03)' }}>
+                ℹ️ Target winner will hit Full House on exactly called song <strong>#{Math.max(1, Math.round((durationLimit * 60) / snippetLimit))}</strong>.
+              </div>
+            </div>
+          )}
+        </div>
 
         {/* Winning Targets Selection */}
         <div style={{ textAlign: 'left', marginBottom: '1.5rem', background: 'rgba(255,255,255,0.02)', padding: '1rem', borderRadius: '0.75rem', border: '1px solid rgba(255,255,255,0.05)' }}>
