@@ -109,7 +109,10 @@ const GamePage: React.FC = () => {
             const gameData = await gameRes.json();
             setGameType(gameData.game_type || 'MUSIC');
             if (gameData.playlist) {
-              setPlaylist(JSON.parse(gameData.playlist));
+              const parsed = JSON.parse(gameData.playlist);
+              if (Array.isArray(parsed)) {
+                setPlaylist(parsed);
+              }
             }
           }
         } catch (err) {

@@ -146,8 +146,10 @@ const AdminDashboard: React.FC = () => {
       if ('playlist' in game && (game as any).playlist) {
         try {
           const parsed = JSON.parse((game as any).playlist);
-          setPlaylist(parsed);
-          setPlaylistInput(parsed.map((item: any) => typeof item === 'object' && item !== null ? item.name : item).join('\n'));
+          if (Array.isArray(parsed)) {
+            setPlaylist(parsed);
+            setPlaylistInput(parsed.map((item: any) => typeof item === 'object' && item !== null ? item.name : item).join('\n'));
+          }
         } catch (e) {
           console.error('Failed to parse playlist:', e);
         }
