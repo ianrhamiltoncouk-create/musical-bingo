@@ -5,6 +5,7 @@ import FireworksCanvas from '../components/FireworksCanvas';
 import { Trophy } from 'lucide-react';
 import { useBranding } from '../App';
 import QRCode from 'qrcode';
+import { savePlaylistToIDB, getPlaylistsFromIDB, type SavedPlaylist } from '../utils/idb';
 
 
 const API_BASE = window.location.port === '5173'
@@ -104,6 +105,36 @@ const AdminDashboard: React.FC = () => {
     }
     return devId;
   });
+
+  const [savedPlaylists, setSavedPlaylists] = useState<SavedPlaylist[]>([]);
+
+  // Load saved playlists from IndexedDB on component mount
+  useEffect(() => {
+    const loadSaved = async () => {
+      const lists = await getPlaylistsFromIDB();
+      setSavedPlaylists(lists);
+    };
+    loadSaved();
+  }, []);
+
+  // Auto-restore audio files from IndexedDB cache if the active playlist matches one of the saved playlists
+  useEffect(() => {
+    if (playlist.length > 0 && audioFiles.length === 0 && savedPlaylists.length > 0) {
+      const match = savedPlaylists.find(pl => {
+        if (pl.tracks.length !== playlist.length) return false;
+        return pl.tracks.every((track, idx) => {
+          const playlistName = typeof playlist[idx] === 'object' && playlist[idx] !== null
+            ? (playlist[idx] as any).name
+            : playlist[idx];
+          return track.name === playlistName;
+        });
+      });
+      if (match) {
+        console.log(`[Auto-Restore] Matching playlist found in IndexedDB cache: "${match.name}". Auto-restoring audio files.`);
+        setAudioFiles(match.tracks);
+      }
+    }
+  }, [playlist, audioFiles.length, savedPlaylists]);
 
   // Sync promo image, delay, and playlist from game data
   useEffect(() => {
@@ -615,6 +646,12 @@ const AdminDashboard: React.FC = () => {
     setPlaylistInput(songNames.join('\n'));
     
     await saveRedirectSettings(redirectUrlInput, redirectDelay, autoRedirectEnabled, brandPromoImage, promoImageDelay, songNames);
+
+    // Save to IndexedDB cache
+    const formattedName = `List - ${new Date().toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} at ${new Date().toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}`;
+    await savePlaylistToIDB(formattedName, tracks);
+    const updated = await getPlaylistsFromIDB();
+    setSavedPlaylists(updated);
   };
 
   const playTrack = (id: number) => {
@@ -1969,6 +2006,41 @@ const AdminDashboard: React.FC = () => {
                     {/* Local Files Tab content */}
                     {activeImportTab === 'LOCAL_FILES' && (
                       <div>
+                        {savedPlaylists.length > 0 && (
+                          <div style={{ marginBottom: '1rem', background: 'rgba(255,255,255,0.02)', padding: '0.75rem', borderRadius: '0.75rem', border: '1px solid rgba(255,255,255,0.05)', textAlign: 'left' }}>
+                            <span style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.5rem', fontWeight: 'bold' }}>
+                              ⚡ Quick-Load Recent Lists:
+                            </span>
+                            <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+                              {savedPlaylists.map((pl) => (
+                                <button
+                                  key={pl.id}
+                                  onClick={async () => {
+                                    setAudioFiles(pl.tracks);
+                                    const songNames = pl.tracks.map(t => t.name);
+                                    setPlaylist(songNames);
+                                    setPlaylistInput(songNames.join('\n'));
+                                    await saveRedirectSettings(redirectUrlInput, redirectDelay, autoRedirectEnabled, brandPromoImage, promoImageDelay, songNames);
+                                  }}
+                                  style={{
+                                    background: 'rgba(99, 102, 241, 0.12)',
+                                    border: '1px solid rgba(99, 102, 241, 0.35)',
+                                    color: 'white',
+                                    fontSize: '0.75rem',
+                                    padding: '0.35rem 0.6rem',
+                                    borderRadius: '0.5rem',
+                                    cursor: 'pointer',
+                                    boxShadow: 'none',
+                                    margin: 0
+                                  }}
+                                >
+                                  📋 {pl.name} ({pl.tracks.length} tracks)
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
                         {audioFiles.length > 0 ? (
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <span style={{ fontSize: '0.8rem', color: 'var(--success)', fontWeight: 'bold' }}>
