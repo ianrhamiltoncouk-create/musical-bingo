@@ -160,7 +160,7 @@ async function refreshSpotifyToken(gameId) {
   }
 }
 
-async function playSpotifyTrack(gameId, trackUri) {
+async function playSpotifyTrack(gameId, trackUri, io) {
   const db = getDb();
   const game = await db.get('SELECT * FROM games WHERE id = ?', [gameId]);
   if (!game || !game.spotify_access_token) return;
@@ -178,7 +178,7 @@ async function playSpotifyTrack(gameId, trackUri) {
     if (playRes.status === 401) {
       const freshToken = await refreshSpotifyToken(gameId);
       if (freshToken) {
-        await fetch('https://api.spotify.com/v1/me/player/play', {
+        const retryRes = await fetch('https://api.spotify.com/v1/me/player/play', {
           method: 'PUT',
           headers: {
             'Authorization': `Bearer ${freshToken}`,
@@ -186,9 +186,40 @@ async function playSpotifyTrack(gameId, trackUri) {
           },
           body: JSON.stringify({ uris: [trackUri] })
         });
+        if (retryRes.status === 403) {
+          console.warn('[Spotify Play] Forbidden. Player requires Spotify Premium to control playback.');
+          if (io) {
+            io.to(gameId).emit('SPOTIFY_PLAY_ERROR', { 
+              error: 'PREMIUM_REQUIRED', 
+              message: 'Playback control forbidden. Please ensure your connected Spotify account is a Premium subscriber.' 
+            });
+          }
+        } else if (retryRes.status === 404) {
+          console.warn('[Spotify Play] No active Spotify device found.');
+          if (io) {
+            io.to(gameId).emit('SPOTIFY_PLAY_ERROR', { 
+              error: 'NO_ACTIVE_DEVICE', 
+              message: 'No active Spotify device found. Please open Spotify and play/pause a song first.' 
+            });
+          }
+        }
+      }
+    } else if (playRes.status === 403) {
+      console.warn('[Spotify Play] Forbidden. Player requires Spotify Premium.');
+      if (io) {
+        io.to(gameId).emit('SPOTIFY_PLAY_ERROR', { 
+          error: 'PREMIUM_REQUIRED', 
+          message: 'Playback control forbidden. Please ensure your connected Spotify account is a Premium subscriber.' 
+        });
       }
     } else if (playRes.status === 404) {
       console.warn('[Spotify Play] No active Spotify device found. Please play a song in Spotify first.');
+      if (io) {
+        io.to(gameId).emit('SPOTIFY_PLAY_ERROR', { 
+          error: 'NO_ACTIVE_DEVICE', 
+          message: 'No active Spotify device found. Please open Spotify on your laptop/phone and play a song first.' 
+        });
+      }
     }
   };
 
@@ -1061,7 +1092,7 @@ async function callNumberHelper(gameId, number, io) {
       const playlist = JSON.parse(game.playlist || '[]');
       const songItem = playlist[number - 1];
       if (songItem && typeof songItem === 'object' && songItem.uri) {
-        playSpotifyTrack(gameId, songItem.uri).catch(err => console.error('[Spotify AutoPlay] Error:', err));
+        playSpotifyTrack(gameId, songItem.uri, io).catch(err => console.error('[Spotify AutoPlay] Error:', err));
       }
     }
 

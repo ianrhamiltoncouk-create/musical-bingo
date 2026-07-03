@@ -541,6 +541,10 @@ const AdminDashboard: React.FC = () => {
       setConnectedCount(data.count);
     });
 
+    socket.on('SPOTIFY_PLAY_ERROR', (data: { error: string, message: string }) => {
+      alert(`⚠️ ${data.message}`);
+    });
+
     socket.on('SPOTIFY_SYNC_STATUS', (data: { enabled: boolean }) => {
       setSpotifySyncEnabled(data.enabled);
     });
@@ -568,6 +572,7 @@ const AdminDashboard: React.FC = () => {
       socket.off('NUMBER_CALLED');
       socket.off('WINNERS_UPDATE');
       socket.off('ROOM_CONNECTED_COUNT');
+      socket.off('SPOTIFY_PLAY_ERROR');
       socket.off('SPOTIFY_SYNC_STATUS');
       socket.off('GAME_STARTED');
       socket.off('FINALE_STARTED');
