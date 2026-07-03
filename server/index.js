@@ -497,7 +497,7 @@ app.post('/api/spotify/credentials', async (req, res) => {
 
 // Spotify Login Redirect
 app.get('/api/spotify/login', async (req, res) => {
-  const { gameId } = req.query;
+  const { gameId, origin } = req.query;
   if (!gameId) return res.status(400).send('gameId required');
   
   try {
@@ -511,15 +511,21 @@ app.get('/api/spotify/login', async (req, res) => {
     }
     
     let reqHost = req.get('host') || '';
+    const isLocal = reqHost.includes('localhost') || reqHost.includes('127.0.0.1');
     if (reqHost.includes('localhost')) {
       reqHost = reqHost.replace('localhost', '127.0.0.1');
     }
-    const redirectUri = `${req.protocol}://${reqHost}/api/spotify/callback`;
+    const protocol = isLocal ? req.protocol : 'https';
+    const redirectUri = `${protocol}://${reqHost}/api/spotify/callback`;
     
     console.log('[Spotify Login] Generated redirect URI:', redirectUri);
     const scopes = 'user-modify-playback-state user-read-playback-state playlist-read-private playlist-read-collaborative';
     
-    const spotifyAuthUrl = `https://accounts.spotify.com/authorize?client_id=${clientId}&response_type=code&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scopes)}&state=${gameId}`;
+    // Encode gameId and client origin in state to return safely after OAuth flow
+    const stateObj = { gameId, origin: origin || `${protocol}://${req.get('host')}` };
+    const state = Buffer.from(JSON.stringify(stateObj)).toString('base64');
+    
+    const spotifyAuthUrl = `https://accounts.spotify.com/authorize?client_id=${clientId}&response_type=code&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scopes)}&state=${state}`;
     res.redirect(spotifyAuthUrl);
   } catch (err) {
     res.status(500).send(err.message);
@@ -528,10 +534,23 @@ app.get('/api/spotify/login', async (req, res) => {
 
 // Spotify Callback
 app.get('/api/spotify/callback', async (req, res) => {
-  const { code, state: gameId } = req.query;
-  if (!code || !gameId) return res.status(400).send('Missing code or gameId state.');
+  const { code, state } = req.query;
+  if (!code || !state) return res.status(400).send('Missing code or state.');
   
   try {
+    // Decode gameId and client origin from the state parameter
+    let gameId;
+    let clientOrigin;
+    try {
+      const decoded = JSON.parse(Buffer.from(state, 'base64').toString('utf8'));
+      gameId = decoded.gameId;
+      clientOrigin = decoded.origin;
+    } catch (e) {
+      // Fallback for backward compatibility if state is just gameId
+      gameId = state;
+      clientOrigin = `${req.protocol}://${req.headers.host}`;
+    }
+
     const db = getDb();
     const game = await db.get('SELECT * FROM games WHERE id = ?', [gameId]);
     if (!game) return res.status(404).send('Game not found.');
@@ -543,10 +562,12 @@ app.get('/api/spotify/callback', async (req, res) => {
     }
     
     let reqHost = req.get('host') || '';
+    const isLocalCallback = reqHost.includes('localhost') || reqHost.includes('127.0.0.1');
     if (reqHost.includes('localhost')) {
       reqHost = reqHost.replace('localhost', '127.0.0.1');
     }
-    const redirectUri = `${req.protocol}://${reqHost}/api/spotify/callback`;
+    const callbackProto = isLocalCallback ? req.protocol : 'https';
+    const redirectUri = `${callbackProto}://${reqHost}/api/spotify/callback`;
     console.log('[Spotify Callback] Matching redirect URI:', redirectUri);
     const authHeader = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
     
@@ -576,8 +597,8 @@ app.get('/api/spotify/callback', async (req, res) => {
       [data.access_token, data.refresh_token, gameId]
     );
     
-    const clientOrigin = req.headers.referer || `${req.protocol}://${req.headers.host}`;
-    const cleanOrigin = clientOrigin.replace(/\/api\/spotify.*/, '');
+    const cleanOrigin = clientOrigin.replace(/\/$/, '');
+    console.log('[Spotify Callback] Login successful, redirecting back to:', `${cleanOrigin}/admin`);
     res.redirect(`${cleanOrigin}/admin`);
   } catch (err) {
     res.status(500).send(err.message);

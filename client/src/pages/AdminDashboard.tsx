@@ -1322,7 +1322,7 @@ const AdminDashboard: React.FC = () => {
                 {(!spotifyConfigured || showAdvancedSpotify) ? (
                   <>
                     <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', margin: '0 0 0.75rem 0' }}>
-                      Provide Spotify Client ID & Client Secret from <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener noreferrer" style={{ color: '#1db954', textDecoration: 'underline' }}>Spotify Developer Portal</a>. Set Redirect URI to: <code style={{ background: 'rgba(0,0,0,0.3)', padding: '0.1rem 0.25rem', borderRadius: '0.25rem', fontSize: '0.65rem' }}>{window.location.origin}/api/spotify/callback</code>
+                      Provide Spotify Client ID & Client Secret from <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener noreferrer" style={{ color: '#1db954', textDecoration: 'underline' }}>Spotify Developer Portal</a>. Set Redirect URI to: <code style={{ background: 'rgba(0,0,0,0.3)', padding: '0.1rem 0.25rem', borderRadius: '0.25rem', fontSize: '0.65rem' }}>{API_BASE.replace('localhost', '127.0.0.1')}/api/spotify/callback</code>
                     </p>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '0.75rem' }}>
                       <input 
@@ -1373,7 +1373,7 @@ const AdminDashboard: React.FC = () => {
                       Status: {spotifyConnected ? <span style={{ color: 'var(--success)', fontWeight: 'bold' }}>Connected ✅</span> : <span style={{ color: 'var(--warning)', fontWeight: 'bold' }}>Disconnected ❌</span>}
                     </label>
                     <a 
-                      href={`${API_BASE}/api/spotify/login?gameId=${game?.id}`}
+                      href={`${API_BASE}/api/spotify/login?gameId=${game?.id}&origin=${encodeURIComponent(window.location.origin)}`}
                       className="button"
                       style={{ 
                         display: 'block', 
@@ -1875,7 +1875,7 @@ const AdminDashboard: React.FC = () => {
                           </div>
                           
                           <a 
-                            href={`${API_BASE}/api/spotify/login?gameId=${game?.id}`}
+                            href={`${API_BASE}/api/spotify/login?gameId=${game?.id}&origin=${encodeURIComponent(window.location.origin)}`}
                             className="button"
                             style={{ 
                               display: 'block', 
