@@ -664,7 +664,7 @@ app.get('/api/spotify/callback', async (req, res) => {
 
 // Import Spotify Playlist Tracks
 app.post('/api/spotify/import', async (req, res) => {
-  const { gameId, playlistUrl } = req.body;
+  const { gameId, playlistUrl, append } = req.body;
   if (!gameId || !playlistUrl) return res.status(400).json({ error: 'gameId and playlistUrl required' });
   
   const match = playlistUrl.match(/playlist\/([a-zA-Z0-9]+)/);
@@ -712,16 +712,27 @@ app.post('/api/spotify/import', async (req, res) => {
         };
       });
       
-    if (formattedPlaylist.length < 9) {
-      return res.status(400).json({ error: `Selected playlist only has ${formattedPlaylist.length} tracks. A minimum of 9 tracks is required.` });
+    let currentPlaylist = [];
+    if (game.playlist) {
+      try {
+        currentPlaylist = JSON.parse(game.playlist);
+      } catch (e) {
+        currentPlaylist = [];
+      }
+    }
+
+    const finalPlaylist = append ? [...currentPlaylist, ...formattedPlaylist] : formattedPlaylist;
+      
+    if (finalPlaylist.length < 9) {
+      return res.status(400).json({ error: `Playlist only has ${finalPlaylist.length} tracks. A minimum of 9 tracks is required.` });
     }
     
     await db.run(
       'UPDATE games SET playlist = ?, spotify_playlist_url = ? WHERE id = ?',
-      [JSON.stringify(formattedPlaylist), playlistUrl, gameId]
+      [JSON.stringify(finalPlaylist), playlistUrl, gameId]
     );
     
-    res.json({ success: true, tracksCount: formattedPlaylist.length });
+    res.json({ success: true, tracksCount: finalPlaylist.length });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

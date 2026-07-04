@@ -354,15 +354,25 @@ const AdminDashboard: React.FC = () => {
     }
   };
 
-  const importSpotifyPlaylist = async () => {
-    if (!game || !spotifyPlaylistUrl) return;
+  const importSpotifyPlaylist = async (urlOverride?: string) => {
+    const targetUrl = urlOverride || spotifyPlaylistUrl;
+    if (!game || !targetUrl) return;
+    
+    let isAppend = false;
+    if (playlist.length > 0) {
+      isAppend = window.confirm(
+        "A playlist already exists. Would you like to APPEND these tracks to the end of it? (Click Cancel to OVERWRITE it instead)"
+      );
+    }
+
     try {
       const res = await fetch(`${API_BASE}/api/spotify/import`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           gameId: game.id,
-          playlistUrl: spotifyPlaylistUrl
+          playlistUrl: targetUrl,
+          append: isAppend
         })
       });
       if (res.ok) {
@@ -376,6 +386,67 @@ const AdminDashboard: React.FC = () => {
     } catch (e) {
       console.error(e);
     }
+  };
+
+  const deleteTrackFromPlaylist = async (trackIndex: number) => {
+    if (!game) return;
+    if (!window.confirm("Are you sure you want to remove this track from the playlist?")) return;
+    const updatedPlaylist = playlist.filter((_, idx) => idx !== trackIndex);
+    try {
+      const res = await fetch(`${API_BASE}/api/game/redirect-settings`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          gameId: game.id,
+          playlist: updatedPlaylist
+        })
+      });
+      if (res.ok) {
+        setPlaylist(updatedPlaylist);
+      }
+    } catch (e) {
+      console.error('Failed to delete track:', e);
+    }
+  };
+
+  const editTrackInPlaylist = async (trackIndex: number) => {
+    if (!game) return;
+    const currentItem = playlist[trackIndex];
+    const currentName = typeof currentItem === 'object' && currentItem !== null ? (currentItem as any).name : currentItem;
+    const newName = window.prompt("Edit track name:", currentName);
+    if (newName === null || newName.trim() === '') return;
+    
+    const updatedPlaylist = playlist.map((item, idx) => {
+      if (idx === trackIndex) {
+        if (typeof item === 'object' && item !== null) {
+          return { ...(item as any), name: newName.trim() };
+        } else {
+          return newName.trim();
+        }
+      }
+      return item;
+    });
+
+    try {
+      const res = await fetch(`${API_BASE}/api/game/redirect-settings`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          gameId: game.id,
+          playlist: updatedPlaylist
+        })
+      });
+      if (res.ok) {
+        setPlaylist(updatedPlaylist);
+      }
+    } catch (e) {
+      console.error('Failed to edit track:', e);
+    }
+  };
+
+  const deleteLocalTrack = (id: number) => {
+    const updated = audioFiles.filter(t => t.id !== id);
+    setAudioFiles(updated);
   };
 
   const verifyLicense = useCallback(async (key: string) => {
@@ -1533,30 +1604,11 @@ const AdminDashboard: React.FC = () => {
                               Or Quick Select from Your Playlists:
                             </label>
                             <select
-                              onChange={async (e) => {
+                              onChange={(e) => {
                                 const selectedUrl = e.target.value;
                                 if (selectedUrl) {
                                   setSpotifyPlaylistUrl(selectedUrl);
-                                  try {
-                                    const res = await fetch(`${API_BASE}/api/spotify/import`, {
-                                      method: 'POST',
-                                      headers: { 'Content-Type': 'application/json' },
-                                      body: JSON.stringify({
-                                        gameId: game?.id,
-                                        playlistUrl: selectedUrl
-                                      })
-                                    });
-                                    if (res.ok) {
-                                      const data = await res.json();
-                                      alert(`Successfully imported ${data.tracksCount} tracks from Spotify!`);
-                                      await fetchGame(game?.id || '');
-                                    } else {
-                                      const err = await res.json();
-                                      alert(`Failed to import: ${err.error}`);
-                                    }
-                                  } catch (err) {
-                                    console.error(err);
-                                  }
+                                  importSpotifyPlaylist(selectedUrl);
                                 }
                               }}
                               style={{
@@ -1595,7 +1647,7 @@ const AdminDashboard: React.FC = () => {
                             style={{ fontSize: '0.75rem', padding: '0.4rem 0.6rem', flex: 1 }}
                           />
                           <button 
-                            onClick={importSpotifyPlaylist} 
+                            onClick={() => importSpotifyPlaylist()} 
                             style={{ fontSize: '0.75rem', padding: '0.4rem 0.75rem', height: 'auto', background: 'var(--secondary)', border: 'none', margin: 0 }}
                           >
                             Import
@@ -2057,30 +2109,11 @@ const AdminDashboard: React.FC = () => {
                                   Choose Playlist from your library:
                                 </label>
                                 <select
-                                  onChange={async (e) => {
+                                  onChange={(e) => {
                                     const selectedUrl = e.target.value;
                                     if (selectedUrl) {
                                       setSpotifyPlaylistUrl(selectedUrl);
-                                      try {
-                                        const res = await fetch(`${API_BASE}/api/spotify/import`, {
-                                          method: 'POST',
-                                          headers: { 'Content-Type': 'application/json' },
-                                          body: JSON.stringify({
-                                            gameId: game?.id,
-                                            playlistUrl: selectedUrl
-                                          })
-                                        });
-                                        if (res.ok) {
-                                          const data = await res.json();
-                                          alert(`Successfully imported ${data.tracksCount} tracks from Spotify!`);
-                                          await fetchGame(game?.id || '');
-                                        } else {
-                                          const err = await res.json();
-                                          alert(`Failed to import: ${err.error}`);
-                                        }
-                                      } catch (err) {
-                                        console.error(err);
-                                      }
+                                      importSpotifyPlaylist(selectedUrl);
                                     }
                                   }}
                                   style={{
@@ -2121,7 +2154,7 @@ const AdminDashboard: React.FC = () => {
                                   style={{ fontSize: '0.75rem', padding: '0.4rem 0.6rem', flex: 1, minWidth: 0 }}
                                 />
                                 <button 
-                                  onClick={importSpotifyPlaylist} 
+                                  onClick={() => importSpotifyPlaylist()} 
                                   style={{ fontSize: '0.75rem', padding: '0.4rem 0.75rem', height: 'auto', background: 'var(--secondary)', border: 'none', margin: 0 }}
                                 >
                                   Import
@@ -2280,18 +2313,29 @@ const AdminDashboard: React.FC = () => {
                         />
                         <button
                           onClick={async () => {
-                            const parsed = playlistInput.split('\n').filter(line => line.trim() !== '');
-                            if (parsed.length < 9) {
+                            const parsedNew = playlistInput.split('\n').filter(line => line.trim() !== '');
+                            if (parsedNew.length === 0) return;
+                            
+                            let finalPlaylist = parsedNew;
+                            if (playlist.length > 0) {
+                              const append = window.confirm("A playlist already exists. Would you like to APPEND these tracks to the end of it? (Click Cancel to OVERWRITE it instead)");
+                              if (append) {
+                                finalPlaylist = [...playlist, ...parsedNew];
+                              }
+                            }
+                            
+                            if (finalPlaylist.length < 9) {
                               alert('Please provide at least 9 tracks.');
                               return;
                             }
+
                             try {
                               const res = await fetch(`${API_BASE}/api/game/redirect-settings`, {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({
                                   gameId: game.id,
-                                  playlist: parsed
+                                  playlist: finalPlaylist
                                 })
                               });
                               if (res.ok) {
@@ -2325,6 +2369,47 @@ const AdminDashboard: React.FC = () => {
                     </div>
                   ) : (
                     <>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+                        <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                          📋 {playlist.length} Playlist Tracks
+                        </span>
+                        <button 
+                          onClick={async () => {
+                            if (!window.confirm("Are you sure you want to delete the entire playlist? This cannot be undone.")) return;
+                            try {
+                              const res = await fetch(`${API_BASE}/api/game/redirect-settings`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                  gameId: game.id,
+                                  playlist: []
+                                })
+                              });
+                              if (res.ok) {
+                                setPlaylist([]);
+                                setAudioFiles([]);
+                                stopMusic();
+                                alert('Playlist cleared successfully!');
+                              }
+                            } catch (e) {
+                              console.error(e);
+                            }
+                          }}
+                          style={{ 
+                            background: '#ef4444', 
+                            color: 'white', 
+                            fontSize: '0.75rem', 
+                            padding: '0.25rem 0.75rem', 
+                            height: 'auto', 
+                            width: 'auto', 
+                            boxShadow: 'none', 
+                            margin: 0 
+                          }}
+                        >
+                          🗑️ Clear Playlist
+                        </button>
+                      </div>
+
                       {audioFiles.length > 0 ? (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '240px', overflowY: 'auto', paddingRight: '0.5rem', marginBottom: '1.25rem', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '1rem', padding: '0.75rem', background: 'rgba(0,0,0,0.1)' }}>
                           <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 'bold', marginBottom: '0.25rem', textAlign: 'left' }}>Click track to Play & Call:</div>
@@ -2359,7 +2444,7 @@ const AdminDashboard: React.FC = () => {
                                     style={{ 
                                       background: isTrackPlaying ? 'var(--accent)' : 'var(--secondary)', 
                                       fontSize: '0.75rem', 
-                                      padding: '0.25rem 0.75rem',
+                                      padding: '0.25rem 0.5rem',
                                       height: 'auto',
                                       width: 'auto',
                                       boxShadow: 'none',
@@ -2367,6 +2452,23 @@ const AdminDashboard: React.FC = () => {
                                     }}
                                   >
                                     {isTrackPlaying ? '⏸️ Pause' : '▶️ Play'}
+                                  </button>
+                                  <button 
+                                    onClick={() => deleteLocalTrack(track.id)}
+                                    style={{ 
+                                      background: 'rgba(239, 68, 68, 0.1)', 
+                                      color: '#ef4444',
+                                      fontSize: '0.75rem', 
+                                      padding: '0.25rem 0.5rem',
+                                      height: 'auto',
+                                      width: 'auto',
+                                      boxShadow: 'none',
+                                      margin: 0,
+                                      border: '1px solid rgba(239, 68, 68, 0.2)'
+                                    }}
+                                    title="Remove track"
+                                  >
+                                    🗑️
                                   </button>
                                 </div>
                               </div>
@@ -2407,14 +2509,49 @@ const AdminDashboard: React.FC = () => {
                                       background: '#1db954', 
                                       color: 'white',
                                       fontSize: '0.75rem', 
-                                      padding: '0.25rem 0.75rem',
+                                      padding: '0.25rem 0.5rem',
                                       height: 'auto',
                                       width: 'auto',
                                       boxShadow: 'none',
                                       margin: 0
                                     }}
+                                    title="Play track"
                                   >
                                     ▶️ Play
+                                  </button>
+                                  <button 
+                                    onClick={() => editTrackInPlaylist(item.id - 1)}
+                                    style={{ 
+                                      background: 'rgba(255, 255, 255, 0.08)', 
+                                      color: 'white',
+                                      fontSize: '0.75rem', 
+                                      padding: '0.25rem 0.5rem',
+                                      height: 'auto',
+                                      width: 'auto',
+                                      boxShadow: 'none',
+                                      margin: 0,
+                                      border: '1px solid rgba(255,255,255,0.1)'
+                                    }}
+                                    title="Edit name"
+                                  >
+                                    ✏️
+                                  </button>
+                                  <button 
+                                    onClick={() => deleteTrackFromPlaylist(item.id - 1)}
+                                    style={{ 
+                                      background: 'rgba(239, 68, 68, 0.1)', 
+                                      color: '#ef4444',
+                                      fontSize: '0.75rem', 
+                                      padding: '0.25rem 0.5rem',
+                                      height: 'auto',
+                                      width: 'auto',
+                                      boxShadow: 'none',
+                                      margin: 0,
+                                      border: '1px solid rgba(239, 68, 68, 0.2)'
+                                    }}
+                                    title="Delete track"
+                                  >
+                                    🗑️
                                   </button>
                                 </div>
                               </div>
