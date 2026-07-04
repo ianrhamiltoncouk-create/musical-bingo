@@ -493,6 +493,59 @@ const AdminDashboard: React.FC = () => {
     }
   };
 
+  const pauseMusic = async () => {
+    // 1. Pause local audio
+    if (audioRef.current) {
+      audioRef.current.pause();
+    }
+    setIsPlaying(false);
+
+    // 2. Pause Spotify playback
+    const savedId = game?.id || sessionStorage.getItem('bingo_host_game_id');
+    if (savedId && spotifyConnected) {
+      try {
+        await fetch(`${API_BASE}/api/spotify/pause`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ gameId: savedId })
+        });
+      } catch (err) {
+        console.error('Failed to pause Spotify playback:', err);
+      }
+    }
+  };
+
+  const resumeMusic = async () => {
+    // 1. Resume local audio
+    if (audioRef.current && currentPlayingId !== null && audioFiles.length > 0) {
+      audioRef.current.play().catch(e => console.error('Failed to resume local audio:', e));
+      setIsPlaying(true);
+    }
+
+    // 2. Resume Spotify playback
+    const savedId = game?.id || sessionStorage.getItem('bingo_host_game_id');
+    if (savedId && spotifyConnected) {
+      try {
+        await fetch(`${API_BASE}/api/spotify/resume`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ gameId: savedId })
+        });
+        setIsPlaying(true);
+      } catch (err) {
+        console.error('Failed to resume Spotify playback:', err);
+      }
+    }
+  };
+
+  const togglePauseMusic = () => {
+    if (isPlaying) {
+      pauseMusic();
+    } else {
+      resumeMusic();
+    }
+  };
+
   const stopMusic = async () => {
     // 1. Stop local audio element
     if (audioRef.current) {
@@ -511,7 +564,7 @@ const AdminDashboard: React.FC = () => {
           body: JSON.stringify({ gameId: savedId })
         });
       } catch (err) {
-        console.error('Failed to pause Spotify playback:', err);
+        console.error('Failed to pause Spotify playback on stop:', err);
       }
     }
   };
@@ -573,6 +626,8 @@ const AdminDashboard: React.FC = () => {
     socket.on('NUMBER_CALLED', (data: { number: number, allNumbers: number[] }) => {
       setCalledNumbers(data.allNumbers);
       lastCalledRef.current = data.number;
+      setCurrentPlayingId(data.number);
+      setIsPlaying(true);
     });
 
     socket.on('WINNERS_UPDATE', (data: { winners: Winner[] }) => {
@@ -685,7 +740,27 @@ const AdminDashboard: React.FC = () => {
 
   const playTrack = (id: number) => {
     const track = audioFilesRef.current.find(t => t.id === id);
-    if (!track) return;
+    if (!track) {
+      if (currentPlayingId === id) {
+        if (isPlaying) {
+          pauseMusic();
+        } else {
+          resumeMusic();
+        }
+      } else {
+        setCurrentPlayingId(id);
+        setIsPlaying(true);
+        const playlistItem = playlist[id - 1];
+        const uri = typeof playlistItem === 'object' && playlistItem !== null ? (playlistItem as any).uri : '';
+        if (uri) {
+          socket.emit('ADMIN_CALL_NUMBER', { gameId: game?.id, number: id });
+        } else {
+          window.open(`https://open.spotify.com/search/${encodeURIComponent(typeof playlistItem === 'object' && playlistItem !== null ? (playlistItem as any).name : playlistItem)}`, '_blank');
+          socket.emit('ADMIN_CALL_NUMBER', { gameId: game?.id, number: id });
+        }
+      }
+      return;
+    }
 
     if (!audioRef.current) {
       audioRef.current = new Audio();
@@ -743,6 +818,7 @@ const AdminDashboard: React.FC = () => {
 
   const resetGame = async () => {
     if (!game) return;
+    stopMusic();
     await fetch(`${API_BASE}/api/game/reset`, { 
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1113,7 +1189,27 @@ const AdminDashboard: React.FC = () => {
     const lastCalled = calledNumbers[calledNumbers.length - 1] || null;
     return (
       <div className="presenter-mode">
-        <button className="exit-btn" style={{ zIndex: 10, right: '13.5rem', background: '#ef4444', borderColor: '#ef4444' }} onClick={stopMusic}>⏹️ Stop Music</button>
+        <button 
+          className="exit-btn" 
+          style={{ 
+            zIndex: 10, 
+            right: '13.5rem', 
+            background: currentPlayingId === null 
+              ? 'rgba(255,255,255,0.05)' 
+              : (isPlaying ? '#eab308' : '#1db954'), 
+            borderColor: currentPlayingId === null 
+              ? 'rgba(255,255,255,0.15)' 
+              : (isPlaying ? '#eab308' : '#1db954'),
+            color: currentPlayingId === null ? 'var(--text-muted)' : 'white',
+            cursor: currentPlayingId === null ? 'not-allowed' : 'pointer'
+          }} 
+          disabled={currentPlayingId === null}
+          onClick={togglePauseMusic}
+        >
+          {currentPlayingId === null 
+            ? '⏸️ Pause Music' 
+            : (isPlaying ? '⏸️ Pause Music' : '▶️ Resume Music')}
+        </button>
         <button className="exit-btn" style={{ zIndex: 10 }} onClick={() => setIsPresenterMode(false)}>✕ Exit Fullscreen</button>
         
         {showFireworks && !presenterWinOverlay && <FireworksCanvas zIndex={1} />}
@@ -1128,13 +1224,30 @@ const AdminDashboard: React.FC = () => {
               </h1>
 
               {presenterWinOverlay.winningNumber && (
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
-                  <span style={{ fontSize: '1rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700 }}>Winning Number</span>
-                  <div className="bingo-ball active" style={{ width: '100px', height: '100px', animation: 'none' }}>
-                    <span className="ball-inner" style={{ width: '55px', height: '55px' }}>
-                      <span className="ball-number" style={{ fontSize: '1.85rem' }}>{presenterWinOverlay.winningNumber}</span>
-                    </span>
-                  </div>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem', marginTop: '1rem', width: '100%', maxWidth: '480px' }}>
+                  <span style={{ fontSize: '1rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '2px' }}>
+                    {game.game_type === 'NUMERIC' ? 'Winning Number' : 'Winning Song'}
+                  </span>
+                  {game.game_type === 'NUMERIC' ? (
+                    <div className="bingo-ball active" style={{ width: '100px', height: '100px', animation: 'none' }}>
+                      <span className="ball-inner" style={{ width: '55px', height: '55px' }}>
+                        <span className="ball-number" style={{ fontSize: '1.85rem' }}>{presenterWinOverlay.winningNumber}</span>
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="now-playing-card active" style={{ maxWidth: '100%', width: '100%' }}>
+                      <span className="card-inner">
+                        <span className="card-value" style={{ fontSize: '1.3rem' }}>
+                          {(() => {
+                            const currentItem = playlist[presenterWinOverlay.winningNumber - 1];
+                            return currentItem 
+                              ? (typeof currentItem === 'object' && currentItem !== null ? (currentItem as any).name : currentItem)
+                              : `Song #${presenterWinOverlay.winningNumber}`;
+                          })()}
+                        </span>
+                      </span>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -2288,45 +2401,20 @@ const AdminDashboard: React.FC = () => {
                                 </span>
                                 <div style={{ display: 'flex', gap: '0.35rem' }}>
                                   <button 
-                                    onClick={() => {
-                                      socket.emit('ADMIN_CALL_NUMBER', { gameId: game?.id, number: item.id });
-                                    }}
-                                    disabled={isCallingPaused}
-                                    style={{ 
-                                      background: 'var(--secondary)', 
-                                      fontSize: '0.75rem', 
-                                      padding: '0.25rem 0.6rem',
-                                      height: 'auto',
-                                      width: 'auto',
-                                      boxShadow: 'none',
-                                      margin: 0
-                                    }}
-                                  >
-                                    📞 Call
-                                  </button>
-                                  <button 
-                                    onClick={() => {
-                                      const uri = typeof item.song === 'object' && item.song !== null ? (item.song as any).uri : '';
-                                      if (uri) {
-                                        socket.emit('ADMIN_CALL_NUMBER', { gameId: game?.id, number: item.id });
-                                      } else {
-                                        window.open(`https://open.spotify.com/search/${encodeURIComponent(typeof item.song === 'object' && item.song !== null ? (item.song as any).name : item.song)}`, '_blank');
-                                        socket.emit('ADMIN_CALL_NUMBER', { gameId: game?.id, number: item.id });
-                                      }
-                                    }}
+                                    onClick={() => playTrack(item.id)}
                                     disabled={isCallingPaused}
                                     style={{ 
                                       background: '#1db954', 
                                       color: 'white',
                                       fontSize: '0.75rem', 
-                                      padding: '0.25rem 0.6rem',
+                                      padding: '0.25rem 0.75rem',
                                       height: 'auto',
                                       width: 'auto',
                                       boxShadow: 'none',
                                       margin: 0
                                     }}
                                   >
-                                    🎵 Spotify
+                                    ▶️ Play
                                   </button>
                                 </div>
                               </div>
@@ -2350,17 +2438,23 @@ const AdminDashboard: React.FC = () => {
                           🎲 Auto Select Next Song
                         </button>
                         <button 
-                          onClick={stopMusic} 
+                          onClick={togglePauseMusic} 
+                          disabled={currentPlayingId === null}
                           style={{ 
                             width: '100%', 
-                            background: '#ef4444', 
-                            color: 'white',
+                            background: currentPlayingId === null 
+                              ? 'rgba(255,255,255,0.05)' 
+                              : (isPlaying ? '#eab308' : '#1db954'), 
+                            color: currentPlayingId === null ? 'var(--text-muted)' : 'white',
                             fontWeight: 'bold',
                             margin: 0,
-                            boxShadow: 'none'
+                            boxShadow: 'none',
+                            cursor: currentPlayingId === null ? 'not-allowed' : 'pointer'
                           }}
                         >
-                          ⏹️ Stop / Pause Music
+                          {currentPlayingId === null 
+                            ? '⏸️ Pause Music' 
+                            : (isPlaying ? '⏸️ Pause Music' : '▶️ Resume Music')}
                         </button>
                       </div>
                     </>

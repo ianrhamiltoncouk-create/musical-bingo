@@ -810,6 +810,45 @@ app.post('/api/spotify/pause', async (req, res) => {
   }
 });
 
+// Spotify Resume Playback
+app.post('/api/spotify/resume', async (req, res) => {
+  const { gameId } = req.body;
+  if (!gameId) return res.status(400).json({ error: 'gameId required' });
+  try {
+    const db = getDb();
+    const game = await db.get('SELECT * FROM games WHERE id = ?', [gameId]);
+    if (!game || !game.spotify_access_token) {
+      return res.status(400).json({ error: 'Spotify account not connected.' });
+    }
+
+    const triggerResume = async (token) => {
+      const response = await fetch('https://api.spotify.com/v1/me/player/play', {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (response.status === 401) {
+        const freshToken = await refreshSpotifyToken(gameId);
+        if (freshToken) {
+          await fetch('https://api.spotify.com/v1/me/player/play', {
+            method: 'PUT',
+            headers: {
+              'Authorization': `Bearer ${freshToken}`
+            }
+          });
+        }
+      }
+    };
+
+    await triggerResume(game.spotify_access_token);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Join game (using roomCode)
 app.post('/api/game/join', async (req, res) => {
   const { name, roomCode } = req.body;
