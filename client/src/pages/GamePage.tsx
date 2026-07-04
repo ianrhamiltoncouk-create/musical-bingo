@@ -90,6 +90,7 @@ const GamePage: React.FC = () => {
   const [finishedPromoImage, setFinishedPromoImage] = useState<string>('');
   const { branding } = useBranding();
   const [gameType, setGameType] = useState<string>('MUSIC');
+  const [isTuning, setIsTuning] = useState(false);
 
   // Load custom branding and playlist dynamically for the current game
   useEffect(() => {
@@ -199,6 +200,14 @@ const GamePage: React.FC = () => {
       }
     });
 
+    socket.on('TUNING_STARTED', () => {
+      setIsTuning(true);
+    });
+
+    socket.on('TUNING_FINISHED', () => {
+      setIsTuning(false);
+    });
+
     return () => {
       socket.off('NUMBER_CALLED');
       socket.off('WINNERS_UPDATE');
@@ -208,6 +217,8 @@ const GamePage: React.FC = () => {
       socket.off('GAME_RESET');
       socket.off('FORCE_REDIRECT');
       socket.off('PLAYLIST_UPDATED');
+      socket.off('TUNING_STARTED');
+      socket.off('TUNING_FINISHED');
       socket.disconnect();
     };
   }, [playerData]);
@@ -286,7 +297,7 @@ const GamePage: React.FC = () => {
         </div>
       )}
       <div className="card">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '0.5rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             {activeBranding?.logoUrl && (
               <img src={activeBranding.logoUrl} alt="Logo" style={{ height: '24px', maxWidth: '80px', objectFit: 'contain' }} />
@@ -311,14 +322,16 @@ const GamePage: React.FC = () => {
               : (currentItem 
                   ? (typeof currentItem === 'object' ? currentItem.name : currentItem)
                   : null);
-            const label = gameType === 'NUMERIC' ? 'Called Number' : 'Now Playing';
-            const isActive = lastCalled !== null;
+            const label = isTuning 
+              ? 'Scanning Dial...' 
+              : (gameType === 'NUMERIC' ? 'Called Number' : 'Now Playing');
+            const isActive = isTuning || lastCalled !== null;
             return (
               <div className={`now-playing-card ${isActive ? 'active' : 'idle'}`}>
                 <span className="card-inner">
                   <span className="card-label">{label}</span>
                   <span className="card-value">
-                    {displayTitle || 'Waiting...'}
+                    {isTuning ? '📻 Tuning Frequencies...' : (displayTitle || 'Waiting...')}
                   </span>
                 </span>
               </div>

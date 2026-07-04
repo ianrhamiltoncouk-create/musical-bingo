@@ -48,6 +48,8 @@ const AdminDashboard: React.FC = () => {
   const [showFireworks, setShowFireworks] = useState<boolean>(false);
   const [connectedCount, setConnectedCount] = useState<number>(0);
   const [joinedCount, setJoinedCount] = useState<number>(0);
+  const [isTuning, setIsTuning] = useState<boolean>(false);
+  const isTuningRef = React.useRef<boolean>(false);
 
   const { branding, refreshBranding } = useBranding();
 
@@ -587,9 +589,30 @@ const AdminDashboard: React.FC = () => {
     }
   };
 
+  const fadeAudio = (audio: HTMLAudioElement, startVol: number, endVol: number, durationMs: number): Promise<void> => {
+    return new Promise((resolve) => {
+      const steps = 20;
+      const intervalTime = durationMs / steps;
+      const volStep = (endVol - startVol) / steps;
+      let currentStep = 0;
+      
+      const interval = setInterval(() => {
+        currentStep++;
+        const nextVol = startVol + volStep * currentStep;
+        audio.volume = Math.max(0, Math.min(1, nextVol));
+        if (currentStep >= steps) {
+          clearInterval(interval);
+          audio.volume = endVol;
+          resolve();
+        }
+      }, intervalTime);
+    });
+  };
+
   const pauseMusic = async () => {
     // 1. Pause local audio
-    if (audioRef.current) {
+    if (audioRef.current && !audioRef.current.paused) {
+      await fadeAudio(audioRef.current, audioRef.current.volume, 0, 800);
       audioRef.current.pause();
     }
     setIsPlaying(false);
@@ -612,8 +635,10 @@ const AdminDashboard: React.FC = () => {
   const resumeMusic = async () => {
     // 1. Resume local audio
     if (audioRef.current && currentPlayingId !== null && audioFiles.length > 0) {
+      audioRef.current.volume = 0;
       audioRef.current.play().catch(e => console.error('Failed to resume local audio:', e));
       setIsPlaying(true);
+      await fadeAudio(audioRef.current, 0, 1, 800);
     }
 
     // 2. Resume Spotify playback
@@ -840,18 +865,111 @@ const AdminDashboard: React.FC = () => {
     setSavedPlaylists(updated);
   };
 
-  const playTrack = (id: number) => {
+  const playTuningSoundEffect = (): Promise<void> => {
+    return new Promise((resolve) => {
+      try {
+        const AudioCtxClass = window.AudioContext || (window as any).webkitAudioContext;
+        if (!AudioCtxClass) {
+          resolve();
+          return;
+        }
+        const ctx = new AudioCtxClass();
+        const bufferSize = ctx.sampleRate * 1.2;
+        const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) {
+          data[i] = Math.random() * 2 - 1;
+        }
+
+        const noise = ctx.createBufferSource();
+        noise.buffer = buffer;
+
+        const filter = ctx.createBiquadFilter();
+        filter.type = 'bandpass';
+        filter.Q.value = 12;
+        filter.frequency.setValueAtTime(450, ctx.currentTime);
+        filter.frequency.exponentialRampToValueAtTime(2800, ctx.currentTime + 0.5);
+        filter.frequency.exponentialRampToValueAtTime(750, ctx.currentTime + 1.1);
+
+        const osc = ctx.createOscillator();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(600, ctx.currentTime);
+        osc.frequency.linearRampToValueAtTime(1600, ctx.currentTime + 0.4);
+        osc.frequency.linearRampToValueAtTime(800, ctx.currentTime + 1.1);
+
+        const oscGain = ctx.createGain();
+        oscGain.gain.setValueAtTime(0.0, ctx.currentTime);
+        oscGain.gain.linearRampToValueAtTime(0.08, ctx.currentTime + 0.3);
+        oscGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1.1);
+
+        const mainGain = ctx.createGain();
+        mainGain.gain.setValueAtTime(0.12, ctx.currentTime);
+        mainGain.gain.linearRampToValueAtTime(0.12, ctx.currentTime + 0.7);
+        mainGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1.1);
+
+        noise.connect(filter);
+        osc.connect(oscGain);
+        filter.connect(mainGain);
+        oscGain.connect(mainGain);
+        mainGain.connect(ctx.destination);
+
+        noise.start();
+        osc.start();
+
+        setTimeout(async () => {
+          noise.stop();
+          osc.stop();
+          await ctx.close();
+          resolve();
+        }, 1100);
+      } catch (err) {
+        console.error('Audio synthesis failed:', err);
+        resolve();
+      }
+    });
+  };
+
+  const playTrack = async (id: number) => {
+    if (isTuningRef.current) return;
+
     const track = audioFilesRef.current.find(t => t.id === id);
     if (!track) {
       if (currentPlayingId === id) {
         if (isPlaying) {
-          pauseMusic();
+          await pauseMusic();
         } else {
-          resumeMusic();
+          await resumeMusic();
         }
       } else {
+        isTuningRef.current = true;
+        setIsTuning(true);
+        socket.emit('TUNING_STARTED', { gameId: game?.id });
+
+        if (audioRef.current && !audioRef.current.paused) {
+          await fadeAudio(audioRef.current, audioRef.current.volume, 0, 1000);
+          audioRef.current.pause();
+        }
+        if (spotifyConnected) {
+          try {
+            await fetch(`${API_BASE}/api/spotify/pause`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ gameId: game?.id })
+            });
+          } catch (e) {
+            console.error(e);
+          }
+        }
+
+        await playTuningSoundEffect();
+
         setCurrentPlayingId(id);
         setIsPlaying(true);
+        
+        isTuningRef.current = false;
+        setIsTuning(false);
+        socket.emit('TUNING_FINISHED', { gameId: game?.id });
+
         const playlistItem = playlist[id - 1];
         const uri = typeof playlistItem === 'object' && playlistItem !== null ? (playlistItem as any).uri : '';
         if (uri) {
@@ -873,27 +991,48 @@ const AdminDashboard: React.FC = () => {
 
     if (currentPlayingId === id) {
       if (isPlaying) {
-        audioRef.current.pause();
-        setIsPlaying(false);
+        await pauseMusic();
       } else {
-        audioRef.current.play();
-        setIsPlaying(true);
+        await resumeMusic();
       }
       return;
     }
 
-    audioRef.current.pause();
+    isTuningRef.current = true;
+    setIsTuning(true);
+    socket.emit('TUNING_STARTED', { gameId: game?.id });
+
+    if (!audioRef.current.paused) {
+      await fadeAudio(audioRef.current, audioRef.current.volume, 0, 1200);
+      audioRef.current.pause();
+    }
+
+    await playTuningSoundEffect();
 
     const objectUrl = URL.createObjectURL(track.file);
     audioRef.current.src = objectUrl;
-    audioRef.current.play().then(() => {
-      setCurrentPlayingId(id);
-      setIsPlaying(true);
-    }).catch(err => console.error('Audio play failed:', err));
+    audioRef.current.volume = 0;
 
     if (!calledNumbers.includes(id) && !isCallingPaused) {
       socket.emit('ADMIN_CALL_NUMBER', { gameId: game?.id, number: id });
     }
+
+    setCurrentPlayingId(id);
+    setIsPlaying(true);
+
+    audioRef.current.play().then(async () => {
+      isTuningRef.current = false;
+      setIsTuning(false);
+      socket.emit('TUNING_FINISHED', { gameId: game?.id });
+      if (audioRef.current) {
+        await fadeAudio(audioRef.current, 0, 1, 1500);
+      }
+    }).catch(err => {
+      console.error('Audio play failed:', err);
+      isTuningRef.current = false;
+      setIsTuning(false);
+      socket.emit('TUNING_FINISHED', { gameId: game?.id });
+    });
   };
 
   useEffect(() => {
@@ -1405,14 +1544,16 @@ const AdminDashboard: React.FC = () => {
               >
                 <span className="card-inner">
                   <span className="card-label">
-                    {game.game_type === 'MUSIC' ? 'Now Playing' : 'Called Number'}
+                    {isTuning ? 'Scanning Dial...' : (game.game_type === 'MUSIC' ? 'Now Playing' : 'Called Number')}
                   </span>
                   <span className="card-value">
-                    {lastCalled 
-                      ? (game.game_type === 'NUMERIC' 
-                          ? lastCalled 
-                          : (typeof playlist[lastCalled - 1] === 'object' && playlist[lastCalled - 1] !== null ? (playlist[lastCalled - 1] as any).name : playlist[lastCalled - 1])) 
-                      : 'Waiting...'}
+                    {isTuning 
+                      ? '📻 Tuning Frequencies...' 
+                      : (lastCalled 
+                          ? (game.game_type === 'NUMERIC' 
+                              ? lastCalled 
+                              : (typeof playlist[lastCalled - 1] === 'object' && playlist[lastCalled - 1] !== null ? (playlist[lastCalled - 1] as any).name : playlist[lastCalled - 1])) 
+                          : 'Waiting...')}
                   </span>
                 </span>
               </div>
