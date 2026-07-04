@@ -306,31 +306,10 @@ const GamePage: React.FC = () => {
             const label = gameType === 'NUMERIC' ? 'Called Number' : 'Now Playing';
             const isActive = lastCalled !== null;
             return (
-              <div className={`bingo-ball ${isActive ? 'active' : 'idle'}`} style={{ 
-                borderRadius: '1.5rem', 
-                width: 'auto', 
-                minWidth: '240px', 
-                padding: '1rem 2rem',
-                height: 'auto',
-                aspectRatio: 'auto'
-              }}>
-                <span className="ball-inner" style={{ 
-                  borderRadius: '1.25rem', 
-                  width: '100%', 
-                  height: '100%',
-                  padding: '0.5rem',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  justifyContent: 'center',
-                  gap: '0.25rem'
-                }}>
-                  <span style={{ fontSize: '0.75rem', textTransform: 'uppercase', opacity: 0.6, letterSpacing: '2px', fontWeight: 800 }}>{label}</span>
-                  <span className="ball-number" style={{ 
-                    fontSize: '1.2rem', 
-                    whiteSpace: 'normal', 
-                    wordBreak: 'break-word',
-                    lineHeight: '1.4'
-                  }}>
+              <div className={`now-playing-card ${isActive ? 'active' : 'idle'}`}>
+                <span className="card-inner">
+                  <span className="card-label">{label}</span>
+                  <span className="card-value">
                     {displayTitle || 'Waiting...'}
                   </span>
                 </span>

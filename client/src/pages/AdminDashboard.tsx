@@ -1159,35 +1159,15 @@ const AdminDashboard: React.FC = () => {
             </div>
             
             <div className="presenter-ball-wrapper" onClick={autoCallNext}>
-              <div key={lastCalled} className={`bingo-ball giant ${(lastCalled && (game.game_type === 'NUMERIC' || playlist[lastCalled - 1])) ? 'active' : 'idle'}`} style={{ 
-                borderRadius: '2.5rem', 
-                width: 'auto', 
-                minWidth: '380px', 
-                maxWidth: '90%',
-                padding: '2.5rem 3rem',
-                height: 'auto',
-                aspectRatio: 'auto',
-                margin: '2rem auto'
-              }}>
-                <span className="ball-inner" style={{ 
-                  borderRadius: '2rem', 
-                  width: '100%', 
-                  height: '100%',
-                  padding: '1rem',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  justifyContent: 'center',
-                  gap: '0.5rem'
-                }}>
-                  <span style={{ fontSize: '1rem', textTransform: 'uppercase', opacity: 0.6, letterSpacing: '4px', fontWeight: 800 }}>
-                    {game.game_type === 'NUMERIC' ? 'Called Number' : 'Now Playing'}
+              <div 
+                key={lastCalled} 
+                className={`presenter-now-playing ${game.game_type === 'NUMERIC' ? 'numeric-type' : ''} ${(lastCalled && (game.game_type === 'NUMERIC' || playlist[lastCalled - 1])) ? 'active' : 'idle'}`}
+              >
+                <span className="card-inner">
+                  <span className="card-label">
+                    {game.game_type === 'MUSIC' ? 'Now Playing' : 'Called Number'}
                   </span>
-                  <span className="ball-number" style={{ 
-                    fontSize: game.game_type === 'NUMERIC' ? '5rem' : '2.25rem', 
-                    whiteSpace: 'normal', 
-                    wordBreak: 'break-word',
-                    lineHeight: '1.3'
-                  }}>
+                  <span className="card-value">
                     {lastCalled 
                       ? (game.game_type === 'NUMERIC' 
                           ? lastCalled 
