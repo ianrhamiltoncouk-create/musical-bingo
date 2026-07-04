@@ -192,6 +192,13 @@ const GamePage: React.FC = () => {
       }
     });
 
+    socket.on('PLAYLIST_UPDATED', (data: { playlist: any[] }) => {
+      console.log('Playlist updated via socket (player):', data.playlist);
+      if (Array.isArray(data.playlist)) {
+        setPlaylist(data.playlist);
+      }
+    });
+
     return () => {
       socket.off('NUMBER_CALLED');
       socket.off('WINNERS_UPDATE');
@@ -200,6 +207,7 @@ const GamePage: React.FC = () => {
       socket.off('GAME_FINISHED');
       socket.off('GAME_RESET');
       socket.off('FORCE_REDIRECT');
+      socket.off('PLAYLIST_UPDATED');
       socket.disconnect();
     };
   }, [playerData]);

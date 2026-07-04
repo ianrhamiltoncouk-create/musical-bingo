@@ -532,6 +532,9 @@ app.post('/api/game/redirect-settings', async (req, res) => {
       `UPDATE games SET ${fields.join(', ')} WHERE id = ?`,
       params
     );
+    if (playlist !== undefined) {
+      io.to(gameId).emit('PLAYLIST_UPDATED', { playlist });
+    }
   }
   res.json({ success: true });
 });
@@ -731,7 +734,7 @@ app.post('/api/spotify/import', async (req, res) => {
       'UPDATE games SET playlist = ?, spotify_playlist_url = ? WHERE id = ?',
       [JSON.stringify(finalPlaylist), playlistUrl, gameId]
     );
-    
+    io.to(gameId).emit('PLAYLIST_UPDATED', { playlist: finalPlaylist });
     res.json({ success: true, tracksCount: finalPlaylist.length });
   } catch (err) {
     res.status(500).json({ error: err.message });

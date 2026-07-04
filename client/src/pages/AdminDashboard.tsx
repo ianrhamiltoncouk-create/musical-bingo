@@ -5,7 +5,7 @@ import FireworksCanvas from '../components/FireworksCanvas';
 import { Trophy } from 'lucide-react';
 import { useBranding } from '../App';
 import QRCode from 'qrcode';
-import { savePlaylistToIDB, getPlaylistsFromIDB, type SavedPlaylist } from '../utils/idb';
+import { savePlaylistToIDB, getPlaylistsFromIDB, deletePlaylistFromIDB, type SavedPlaylist } from '../utils/idb';
 
 
 const API_BASE = window.location.port === '5173'
@@ -388,6 +388,27 @@ const AdminDashboard: React.FC = () => {
     }
   };
 
+  const addTrackToPlaylist = async (trackName: string) => {
+    if (!game) return;
+    const updatedPlaylist = [...playlist, trackName];
+    try {
+      const res = await fetch(`${API_BASE}/api/game/redirect-settings`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          gameId: game.id,
+          playlist: updatedPlaylist
+        })
+      });
+      if (res.ok) {
+        setPlaylist(updatedPlaylist);
+        await fetchGame(game.id);
+      }
+    } catch (e) {
+      console.error('Failed to add track:', e);
+    }
+  };
+
   const deleteTrackFromPlaylist = async (trackIndex: number) => {
     if (!game) return;
     if (!window.confirm("Are you sure you want to remove this track from the playlist?")) return;
@@ -403,6 +424,7 @@ const AdminDashboard: React.FC = () => {
       });
       if (res.ok) {
         setPlaylist(updatedPlaylist);
+        await fetchGame(game.id);
       }
     } catch (e) {
       console.error('Failed to delete track:', e);
@@ -438,6 +460,7 @@ const AdminDashboard: React.FC = () => {
       });
       if (res.ok) {
         setPlaylist(updatedPlaylist);
+        await fetchGame(game.id);
       }
     } catch (e) {
       console.error('Failed to edit track:', e);
@@ -738,6 +761,13 @@ const AdminDashboard: React.FC = () => {
     socket.on('GAME_STARTED', () => fetchGame(game.id));
     socket.on('FINALE_STARTED', () => fetchGame(game.id));
     socket.on('GAME_FINISHED', () => fetchGame(game.id));
+    socket.on('PLAYLIST_UPDATED', (data: { playlist: any[] }) => {
+      console.log('Playlist updated via socket (admin):', data.playlist);
+      if (Array.isArray(data.playlist)) {
+        setPlaylist(data.playlist);
+        setPlaylistInput(data.playlist.map((item: any) => typeof item === 'object' && item !== null ? item.name : item).join('\n'));
+      }
+    });
     socket.on('GAME_RESET', () => {
       fetchGame(game.id);
       setCalledNumbers([]);
@@ -764,6 +794,7 @@ const AdminDashboard: React.FC = () => {
       socket.off('FINALE_STARTED');
       socket.off('GAME_FINISHED');
       socket.off('GAME_RESET');
+      socket.off('PLAYLIST_UPDATED');
       socket.disconnect();
       if (winTimeoutRef.current) {
         clearTimeout(winTimeoutRef.current);
@@ -2209,29 +2240,56 @@ const AdminDashboard: React.FC = () => {
                             </span>
                             <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
                               {savedPlaylists.map((pl) => (
-                                <button
-                                  key={pl.id}
-                                  onClick={async () => {
-                                    setAudioFiles(pl.tracks);
-                                    const songNames = pl.tracks.map(t => t.name);
-                                    setPlaylist(songNames);
-                                    setPlaylistInput(songNames.join('\n'));
-                                    await saveRedirectSettings(redirectUrlInput, redirectDelay, autoRedirectEnabled, brandPromoImage, promoImageDelay, songNames);
-                                  }}
-                                  style={{
-                                    background: 'rgba(99, 102, 241, 0.12)',
-                                    border: '1px solid rgba(99, 102, 241, 0.35)',
-                                    color: 'white',
-                                    fontSize: '0.75rem',
-                                    padding: '0.35rem 0.6rem',
-                                    borderRadius: '0.5rem',
-                                    cursor: 'pointer',
-                                    boxShadow: 'none',
-                                    margin: 0
-                                  }}
-                                >
-                                  📋 {pl.name} ({pl.tracks.length} tracks)
-                                </button>
+                                <div key={pl.id} style={{ display: 'flex', alignItems: 'center', background: 'rgba(99, 102, 241, 0.12)', border: '1px solid rgba(99, 102, 241, 0.35)', borderRadius: '0.5rem', overflow: 'hidden' }}>
+                                  <button
+                                    onClick={async () => {
+                                      setAudioFiles(pl.tracks);
+                                      const songNames = pl.tracks.map(t => t.name);
+                                      setPlaylist(songNames);
+                                      setPlaylistInput(songNames.join('\n'));
+                                      await saveRedirectSettings(redirectUrlInput, redirectDelay, autoRedirectEnabled, brandPromoImage, promoImageDelay, songNames);
+                                    }}
+                                    style={{
+                                      background: 'none',
+                                      border: 'none',
+                                      color: 'white',
+                                      fontSize: '0.75rem',
+                                      padding: '0.35rem 0.6rem',
+                                      cursor: 'pointer',
+                                      boxShadow: 'none',
+                                      margin: 0
+                                    }}
+                                  >
+                                    📋 {pl.name} ({pl.tracks.length})
+                                  </button>
+                                  <button
+                                    onClick={async (e) => {
+                                      e.stopPropagation();
+                                      if (!window.confirm(`Delete saved list "${pl.name}"?`)) return;
+                                      await deletePlaylistFromIDB(pl.id);
+                                      const updated = await getPlaylistsFromIDB();
+                                      setSavedPlaylists(updated);
+                                    }}
+                                    style={{
+                                      background: 'rgba(239, 68, 68, 0.2)',
+                                      border: 'none',
+                                      borderLeft: '1px solid rgba(99, 102, 241, 0.35)',
+                                      color: '#ef4444',
+                                      fontSize: '0.75rem',
+                                      padding: '0.35rem 0.5rem',
+                                      cursor: 'pointer',
+                                      boxShadow: 'none',
+                                      margin: 0,
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      height: '100%'
+                                    }}
+                                    title="Delete saved list"
+                                  >
+                                    ✕
+                                  </button>
+                                </div>
                               ))}
                             </div>
                           </div>
@@ -2386,6 +2444,7 @@ const AdminDashboard: React.FC = () => {
                                 })
                               });
                               if (res.ok) {
+                                await fetchGame(game.id);
                                 setPlaylist([]);
                                 setAudioFiles([]);
                                 stopMusic();
@@ -2407,6 +2466,38 @@ const AdminDashboard: React.FC = () => {
                           }}
                         >
                           🗑️ Clear Playlist
+                        </button>
+                      </div>
+
+                      <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '1rem', marginTop: '0.5rem' }}>
+                        <input 
+                          type="text" 
+                          placeholder="Add Song: Song Name - Artist Name" 
+                          id="new-track-input"
+                          style={{ fontSize: '0.75rem', padding: '0.4rem 0.6rem', flex: 1, minWidth: 0, borderRadius: '0.5rem', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.2)', color: 'white' }}
+                          onKeyDown={async (e) => {
+                            if (e.key === 'Enter') {
+                              const input = e.currentTarget;
+                              const val = input.value.trim();
+                              if (val) {
+                                input.value = '';
+                                await addTrackToPlaylist(val);
+                              }
+                            }
+                          }}
+                        />
+                        <button
+                          onClick={async () => {
+                            const input = document.getElementById('new-track-input') as HTMLInputElement;
+                            const val = input?.value?.trim();
+                            if (val) {
+                              input.value = '';
+                              await addTrackToPlaylist(val);
+                            }
+                          }}
+                          style={{ background: 'var(--accent)', fontSize: '0.75rem', padding: '0.4rem 0.8rem', height: 'auto', width: 'auto', boxShadow: 'none', margin: 0, borderRadius: '0.5rem' }}
+                        >
+                          ➕ Add Track
                         </button>
                       </div>
 
