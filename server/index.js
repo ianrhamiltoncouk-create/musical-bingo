@@ -329,9 +329,52 @@ app.post('/api/game/create', async (req, res) => {
     const newGameId = uuidv4();
     const roomCode = await generateUniqueRoomCode(db);
     
+    // Fetch last game configuration to copy over branding, settings, and Spotify credentials
+    const lastGame = await db.get('SELECT * FROM games ORDER BY created_at DESC LIMIT 1');
+    
     const type = gameType || 'MUSIC';
     const mode = gameMode || 'SINGLE_WINNER';
-    const playlistJson = type === 'MUSIC' ? JSON.stringify(DEFAULT_PLAYLIST) : null;
+    
+    // Default config values
+    let playlistJson = type === 'MUSIC' ? JSON.stringify(DEFAULT_PLAYLIST) : null;
+    let companyName = 'Musical Bingo';
+    let logoUrl = '';
+    let primaryColor = '#ec4899';
+    let secondaryColor = '#6366f1';
+    let backgroundColor = '#0d0526';
+    let redirectUrl = null;
+    let redirectDelay = 30;
+    let autoRedirectEnabled = 1;
+    let promoImage = null;
+    let promoImageDelay = 0;
+    
+    let spotifyClientId = null;
+    let spotifyClientSecret = null;
+    let spotifyAccessToken = null;
+    let spotifyRefreshToken = null;
+    let spotifyPlaylistUrl = null;
+
+    if (lastGame) {
+      if (type === 'MUSIC' && lastGame.playlist) {
+        playlistJson = lastGame.playlist;
+      }
+      companyName = lastGame.company_name || companyName;
+      logoUrl = lastGame.logo_url || logoUrl;
+      primaryColor = lastGame.primary_color || primaryColor;
+      secondaryColor = lastGame.secondary_color || secondaryColor;
+      backgroundColor = lastGame.background_color || backgroundColor;
+      redirectUrl = lastGame.redirect_url;
+      redirectDelay = lastGame.redirect_delay !== undefined ? lastGame.redirect_delay : 30;
+      autoRedirectEnabled = lastGame.auto_redirect_enabled !== undefined ? lastGame.auto_redirect_enabled : 1;
+      promoImage = lastGame.promo_image;
+      promoImageDelay = lastGame.promo_image_delay !== undefined ? lastGame.promo_image_delay : 0;
+      
+      spotifyClientId = lastGame.spotify_client_id;
+      spotifyClientSecret = lastGame.spotify_client_secret;
+      spotifyAccessToken = lastGame.spotify_access_token;
+      spotifyRefreshToken = lastGame.spotify_refresh_token;
+      spotifyPlaylistUrl = lastGame.spotify_playlist_url;
+    }
     
     const targetLineInt = req.body.targetLine !== undefined ? (req.body.targetLine ? 1 : 0) : 1;
     const targetTwoLinesInt = req.body.targetTwoLines !== undefined ? (req.body.targetTwoLines ? 1 : 0) : 1;
@@ -356,8 +399,22 @@ app.post('/api/game/create', async (req, res) => {
     }
     
     await db.run(
-      'INSERT INTO games (id, status, room_code, playlist, game_type, game_mode, finale_numbers, license_key, target_line, target_two_lines, target_full_house, grid_size, free_space_enabled, time_limit_enabled, duration_limit, snippet_limit, target_winner_step) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [newGameId, 'WAITING', roomCode, playlistJson, type, mode, anchors, license.license_key, targetLineInt, targetTwoLinesInt, targetFullHouseInt, gridSz, freeSp, timeLim, durLim, snipLim, targetWinStep]
+      `INSERT INTO games (
+        id, status, room_code, playlist, game_type, game_mode, finale_numbers, license_key, 
+        target_line, target_two_lines, target_full_house, grid_size, free_space_enabled, 
+        time_limit_enabled, duration_limit, snippet_limit, target_winner_step,
+        company_name, logo_url, primary_color, secondary_color, background_color,
+        redirect_url, redirect_delay, auto_redirect_enabled, promo_image, promo_image_delay,
+        spotify_client_id, spotify_client_secret, spotify_access_token, spotify_refresh_token, spotify_playlist_url
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        newGameId, 'WAITING', roomCode, playlistJson, type, mode, anchors, license.license_key, 
+        targetLineInt, targetTwoLinesInt, targetFullHouseInt, gridSz, freeSp, 
+        timeLim, durLim, snipLim, targetWinStep,
+        companyName, logoUrl, primaryColor, secondaryColor, backgroundColor,
+        redirectUrl, redirectDelay, autoRedirectEnabled, promoImage, promoImageDelay,
+        spotifyClientId, spotifyClientSecret, spotifyAccessToken, spotifyRefreshToken, spotifyPlaylistUrl
+      ]
     );
     const game = await db.get('SELECT * FROM games WHERE id = ?', [newGameId]);
     res.json(game);

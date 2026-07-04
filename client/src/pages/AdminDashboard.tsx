@@ -74,6 +74,7 @@ const AdminDashboard: React.FC = () => {
   const [spotifyPlaylistUrl, setSpotifyPlaylistUrl] = useState<string>('');
   const [spotifyConnected, setSpotifyConnected] = useState<boolean>(false);
   const [spotifyPlaylists, setSpotifyPlaylists] = useState<any[]>([]);
+  const [spotifyPlaylistsError, setSpotifyPlaylistsError] = useState<string | null>(null);
   const [selectedGameType, setSelectedGameType] = useState<'MUSIC' | 'NUMERIC'>('MUSIC');
   const [spotifyConfigured, setSpotifyConfigured] = useState<boolean>(false);
   const [selectedGameMode, setSelectedGameMode] = useState<'SINGLE_WINNER' | 'PARTY_CLIMAX'>('SINGLE_WINNER');
@@ -163,16 +164,18 @@ const AdminDashboard: React.FC = () => {
 
   const fetchSpotifyPlaylists = useCallback(async () => {
     if (!game?.id || !spotifyConnected) return;
+    setSpotifyPlaylistsError(null);
     try {
       const res = await fetch(`${API_BASE}/api/spotify/playlists?gameId=${game.id}`);
-      if (res.ok) {
-        const data = await res.json();
-        if (data.success) {
-          setSpotifyPlaylists(data.playlists);
-        }
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setSpotifyPlaylists(data.playlists);
+      } else {
+        setSpotifyPlaylistsError(data.error || 'Failed to fetch Spotify playlists');
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error('Failed to fetch Spotify playlists:', e);
+      setSpotifyPlaylistsError(e.message || 'Failed to fetch Spotify playlists');
     }
   }, [game?.id, spotifyConnected]);
 
@@ -1392,7 +1395,21 @@ const AdminDashboard: React.FC = () => {
 
                     {spotifyConnected && (
                       <div style={{ marginTop: '0.75rem' }}>
-                        {spotifyPlaylists.length > 0 && (
+                        {spotifyPlaylistsError && (
+                          <div style={{
+                            background: 'rgba(239, 68, 68, 0.1)',
+                            border: '1px solid rgba(239, 68, 68, 0.3)',
+                            borderRadius: '0.5rem',
+                            padding: '0.5rem 0.75rem',
+                            color: '#ef4444',
+                            fontSize: '0.75rem',
+                            marginBottom: '0.75rem'
+                          }}>
+                            ⚠️ {spotifyPlaylistsError}
+                          </div>
+                        )}
+
+                        {spotifyPlaylists.length > 0 ? (
                           <div style={{ marginBottom: '0.75rem' }}>
                             <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>
                               Or Quick Select from Your Playlists:
@@ -1443,6 +1460,12 @@ const AdminDashboard: React.FC = () => {
                               ))}
                             </select>
                           </div>
+                        ) : (
+                          !spotifyPlaylistsError && (
+                            <div style={{ marginBottom: '0.75rem', fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                              ℹ️ No playlists found in your Spotify library. You can still paste a Playlist URL below.
+                            </div>
+                          )
                         )}
                         <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>Import Spotify Playlist URL</label>
                         <div style={{ display: 'flex', gap: '0.35rem' }}>
@@ -1896,7 +1919,21 @@ const AdminDashboard: React.FC = () => {
 
                         {spotifyConnected ? (
                           <>
-                            {spotifyPlaylists.length > 0 && (
+                            {spotifyPlaylistsError && (
+                              <div style={{
+                                background: 'rgba(239, 68, 68, 0.1)',
+                                border: '1px solid rgba(239, 68, 68, 0.3)',
+                                borderRadius: '0.5rem',
+                                padding: '0.5rem 0.75rem',
+                                color: '#ef4444',
+                                fontSize: '0.75rem',
+                                marginBottom: '0.75rem'
+                              }}>
+                                ⚠️ {spotifyPlaylistsError}
+                              </div>
+                            )}
+
+                            {spotifyPlaylists.length > 0 ? (
                               <div>
                                 <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>
                                   Choose Playlist from your library:
@@ -1947,6 +1984,12 @@ const AdminDashboard: React.FC = () => {
                                   ))}
                                 </select>
                               </div>
+                            ) : (
+                              !spotifyPlaylistsError && (
+                                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                                  ℹ️ No playlists found in your Spotify library. You can still paste a Playlist URL below.
+                                </div>
+                              )
                             )}
 
                             <div>
