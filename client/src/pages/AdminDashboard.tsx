@@ -493,7 +493,31 @@ const AdminDashboard: React.FC = () => {
     }
   };
 
+  const stopMusic = async () => {
+    // 1. Stop local audio element
+    if (audioRef.current) {
+      audioRef.current.pause();
+    }
+    setIsPlaying(false);
+    setCurrentPlayingId(null);
+
+    // 2. Stop/pause Spotify playback
+    const savedId = game?.id || sessionStorage.getItem('bingo_host_game_id');
+    if (savedId && spotifyConnected) {
+      try {
+        await fetch(`${API_BASE}/api/spotify/pause`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ gameId: savedId })
+        });
+      } catch (err) {
+        console.error('Failed to pause Spotify playback:', err);
+      }
+    }
+  };
+
   const closeRoom = () => {
+    stopMusic();
     sessionStorage.removeItem('bingo_host_game_id');
     setGame(null);
     setCalledNumbers([]);
@@ -1089,6 +1113,7 @@ const AdminDashboard: React.FC = () => {
     const lastCalled = calledNumbers[calledNumbers.length - 1] || null;
     return (
       <div className="presenter-mode">
+        <button className="exit-btn" style={{ zIndex: 10, right: '13.5rem', background: '#ef4444', borderColor: '#ef4444' }} onClick={stopMusic}>⏹️ Stop Music</button>
         <button className="exit-btn" style={{ zIndex: 10 }} onClick={() => setIsPresenterMode(false)}>✕ Exit Fullscreen</button>
         
         {showFireworks && !presenterWinOverlay && <FireworksCanvas zIndex={1} />}
@@ -2310,12 +2335,12 @@ const AdminDashboard: React.FC = () => {
                         </div>
                       )}
                       
-                      <div style={{ display: 'flex', gap: '0.5rem' }}>
+                      <div style={{ display: 'flex', gap: '0.5rem', flexDirection: 'column' }}>
                         <button 
                           onClick={autoCallNext} 
                           disabled={isCallingPaused} 
                           style={{ 
-                            flex: 1, 
+                            width: '100%', 
                             background: 'linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%)',
                             fontWeight: 'bold',
                             opacity: isCallingPaused ? 0.5 : 1,
@@ -2323,6 +2348,19 @@ const AdminDashboard: React.FC = () => {
                           }}
                         >
                           🎲 Auto Select Next Song
+                        </button>
+                        <button 
+                          onClick={stopMusic} 
+                          style={{ 
+                            width: '100%', 
+                            background: '#ef4444', 
+                            color: 'white',
+                            fontWeight: 'bold',
+                            margin: 0,
+                            boxShadow: 'none'
+                          }}
+                        >
+                          ⏹️ Stop / Pause Music
                         </button>
                       </div>
                     </>
