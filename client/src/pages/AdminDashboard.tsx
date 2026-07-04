@@ -1322,7 +1322,7 @@ const AdminDashboard: React.FC = () => {
                 </div>
               )}
 
-              {presenterWinOverlay.type === 'FULL_HOUSE' ? (
+              {presenterWinOverlay.type === 'FULL_HOUSE' && game.game_mode === 'PARTY_CLIMAX' ? (
                 <p className="win-announcement-subtitle" style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--accent)', marginTop: '1rem' }}>
                   🎉 EVERYONE WINS! 🎉
                 </p>
