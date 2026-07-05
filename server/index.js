@@ -602,7 +602,7 @@ app.get('/api/spotify/login', async (req, res) => {
     const stateObj = { gameId, origin: origin || `${protocol}://${req.get('host')}` };
     const state = Buffer.from(JSON.stringify(stateObj)).toString('base64');
     
-    const spotifyAuthUrl = `https://accounts.spotify.com/authorize?client_id=${clientId}&response_type=code&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scopes)}&state=${state}`;
+    const spotifyAuthUrl = `https://accounts.spotify.com/authorize?client_id=${clientId}&response_type=code&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scopes)}&state=${state}&show_dialog=true`;
     res.redirect(spotifyAuthUrl);
   } catch (err) {
     res.status(500).send(err.message);
@@ -700,7 +700,7 @@ app.post('/api/spotify/import', async (req, res) => {
     if (!token) return res.status(401).json({ error: 'Spotify account not connected. Please login first.' });
     
     const fetchTracks = async (bearerToken) => {
-      return fetch(`https://api.spotify.com/v1/playlists/${playlistId}/tracks?limit=100`, {
+      return fetch(`https://api.spotify.com/v1/playlists/${playlistId}/items?limit=100`, {
         headers: { 'Authorization': `Bearer ${bearerToken}` }
       });
     };
