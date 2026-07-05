@@ -114,6 +114,23 @@ async function generateUniqueRoomCode(db) {
   return uuidv4().slice(0, 5).toUpperCase();
 }
 
+function formatSpotifyError(status, errText) {
+  let message = errText;
+  try {
+    const parsed = JSON.parse(errText);
+    if (parsed && parsed.error && parsed.error.message) {
+      message = parsed.error.message;
+    }
+  } catch (e) {
+    // Not JSON
+  }
+
+  if (message && (message.toLowerCase().includes("user may not be registered") || message.toLowerCase().includes("dashboard"))) {
+    return "Spotify API error: The user account is not registered in your Spotify Developer Dashboard under 'User Management'. In Development Mode, only explicitly whitelisted accounts can connect.";
+  }
+  return `Spotify API error: ${message}`;
+}
+
 async function refreshSpotifyToken(gameId) {
   const db = getDb();
   const game = await db.get('SELECT * FROM games WHERE id = ?', [gameId]);
@@ -697,7 +714,7 @@ app.post('/api/spotify/import', async (req, res) => {
     
     if (!response.ok) {
       const errText = await response.text();
-      return res.status(response.status).json({ error: `Spotify API error: ${errText}` });
+      return res.status(response.status).json({ error: formatSpotifyError(response.status, errText) });
     }
     
     const playlistData = await response.json();
@@ -768,7 +785,7 @@ app.get('/api/spotify/playlists', async (req, res) => {
     
     if (!response.ok) {
       const errText = await response.text();
-      return res.status(response.status).json({ error: `Spotify API error: ${errText}` });
+      return res.status(response.status).json({ error: formatSpotifyError(response.status, errText) });
     }
     
     const data = await response.json();

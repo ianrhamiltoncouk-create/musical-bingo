@@ -71,8 +71,8 @@ const AdminDashboard: React.FC = () => {
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const audioRef = React.useRef<HTMLAudioElement | null>(null);
   const [spotifySyncEnabled, setSpotifySyncEnabled] = useState<boolean>(false);
-  const [spotifyClientId, setSpotifyClientId] = useState<string>('');
-  const [spotifyClientSecret, setSpotifyClientSecret] = useState<string>('');
+  const [spotifyClientId, setSpotifyClientId] = useState<string>(() => localStorage.getItem('mb_spotify_client_id') || '');
+  const [spotifyClientSecret, setSpotifyClientSecret] = useState<string>(() => localStorage.getItem('mb_spotify_client_secret') || '');
   const [spotifyPlaylistUrl, setSpotifyPlaylistUrl] = useState<string>('');
   const [spotifyConnected, setSpotifyConnected] = useState<boolean>(false);
   const [spotifyPlaylists, setSpotifyPlaylists] = useState<any[]>([]);
@@ -157,8 +157,22 @@ const AdminDashboard: React.FC = () => {
           console.error('Failed to parse playlist:', e);
         }
       }
-      setSpotifyClientId((game as any).spotify_client_id || '');
-      setSpotifyClientSecret((game as any).spotify_client_secret || '');
+      const dbClientId = (game as any).spotify_client_id;
+      const dbClientSecret = (game as any).spotify_client_secret;
+      if (dbClientId) {
+        setSpotifyClientId(dbClientId);
+        localStorage.setItem('mb_spotify_client_id', dbClientId);
+      } else {
+        const localVal = localStorage.getItem('mb_spotify_client_id');
+        if (localVal) setSpotifyClientId(localVal);
+      }
+      if (dbClientSecret) {
+        setSpotifyClientSecret(dbClientSecret);
+        localStorage.setItem('mb_spotify_client_secret', dbClientSecret);
+      } else {
+        const localVal = localStorage.getItem('mb_spotify_client_secret');
+        if (localVal) setSpotifyClientSecret(localVal);
+      }
       setSpotifyPlaylistUrl((game as any).spotify_playlist_url || '');
       setSpotifyConnected(!!(game as any).spotify_access_token);
     }
@@ -336,6 +350,8 @@ const AdminDashboard: React.FC = () => {
   const saveSpotifyCredentials = async () => {
     if (!game) return;
     try {
+      localStorage.setItem('mb_spotify_client_id', spotifyClientId);
+      localStorage.setItem('mb_spotify_client_secret', spotifyClientSecret);
       const res = await fetch(`${API_BASE}/api/spotify/credentials`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

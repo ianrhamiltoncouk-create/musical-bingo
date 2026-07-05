@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Musical Bingo for Venues | Boost Patron Spend and Event Engagement</title>
+  <meta name="description" content="Replace boring numbers with hit songs. Command Spotify automatically, host offline or online, and guarantee a single high-energy winner every game.">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <!-- Header Navigation -->
+  <header>
+    <div class="nav-container">
+      <a href="#" class="logo">🎵 Musical Bingo</a>
+      <ul class="nav-links">
+        <li><a href="#features" class="nav-link">Features</a></li>
+        <li><a href="#demo" class="nav-link">How it Works</a></li>
+        <li><a href="#calculator" class="nav-link">Venue ROI</a></li>
+        <li><a href="#pricing" class="nav-link">Pricing</a></li>
+        <li><a href="#contact" class="btn btn-primary" style="padding: 0.5rem 1.25rem;">Get Started</a></li>
+      </ul>
+    </div>
+  </header>
+
+  <!-- Hero Section -->
+  <section class="hero">
+    <div class="hero-text">
+      <h1>Ditch the Numbers. <span>Play the Music.</span></h1>
+      <p>
+        The ultimate automated Musical Bingo system built for pubs, clubs, and event organizers. Keep crowds laughing, singing, and buying drinks with real-time browser cards and hands-free Spotify controls.
+      </p>
+      <div class="hero-actions">
+        <a href="#contact" class="btn btn-primary">Book a Venue Demo</a>
+        <a href="#demo" class="btn btn-secondary">Try Live Demo</a>
+      </div>
+    </div>
+    <div class="hero-image-wrapper" style="background-image: url('assets/hero_pub_event.jpg');"></div>
+  </section>
+
+  <!-- Performance Stats Bar -->
+  <div class="stats-bar" style="max-width: 1200px; margin: 0 auto;">
+    <div class="stat-item">
+      <h3>10s</h3>
+      <p>Setup Time</p>
+    </div>
+    <div class="stat-item">
+      <h3>0</h3>
+      <p>App Installs Needed</p>
+    </div>
+    <div class="stat-item">
+      <h3>+35%</h3>
+      <p>Drink Sales Lift</p>
+    </div>
+    <div class="stat-item">
+      <h3>100%</h3>
+      <p>Autoplay Sync</p>
+    </div>
+  </div>
+
+  <!-- Main Features Grid -->
+  <section id="features">
+    <h2 class="section-title">Built to Fill Tables</h2>
+    <p class="section-subtitle">A high-tech, offline-capable package designed to make hosting trivia and theme nights effortless.</p>
+    
+    <div class="features-grid">
+      <div class="feature-card">
+        <div class="feature-icon">🟢</div>
+        <h3>Spotify Autoplay Sync</h3>
+        <p>Connect your playlist and put it in fullscreen. The system will auto-call songs, track win conditions, and trigger the actual music playback on your speakers automatically!</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">🏆</div>
+        <h3>Single-Winner Guarantee</h3>
+        <p>Standard bingo cards often cause multiple simultaneous wins, killing the tension. Our backend engine guarantees a single climax winner for full house while maintaining nail-biting near-misses.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">📱</div>
+        <h3>No Installs (QR Code Join)</h3>
+        <p>Players simply scan a custom QR code on their phone to join. A unique card is generated in their browser instantly. Works 100% offline on a local router or online in the cloud.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">🎨</div>
+        <h3>Custom Venue Branding</h3>
+        <p>Inject your logo, set colors to match your pub's theme, upload sponsor flyers, and set up automatic redirection to your menu or social media handles when the game ends.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">📁</div>
+        <h3>Local Audio Player</h3>
+        <p>Don't want to use Spotify? Simply select a folder of local MP3 or WAV audio tracks directly in the host panel to play and call files on the fly.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">🚀</div>
+        <h3>Linear Progression</h3>
+        <p>The game automatically tracks stages. Transition from finding one line, to two lines, and finally full house. Keep players fully focused with live winner checks.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Interactive Demo Section -->
+  <section id="demo" style="background: rgba(255,255,255,0.01); border-top: 1px solid var(--glass-border); border-bottom: 1px solid var(--glass-border);">
+    <h2 class="section-title">See It in Action</h2>
+    <p class="section-subtitle">Test the player experience right now. Simulate a host calling a track and see how real-time daubing works.</p>
+    
+    <div class="showcase-grid">
+      <div class="interactive-demo">
+        <div class="demo-title">Simulated Player Card</div>
+        <div class="demo-grid">
+          <div class="demo-cell">Song 1</div>
+          <div class="demo-cell">Song 2</div>
+          <div class="demo-cell">Song 3</div>
+          <div class="demo-cell">Song 4</div>
+          <div class="demo-cell">Song 5</div>
+          <div class="demo-cell">Song 6</div>
+          <div class="demo-cell">Song 7</div>
+          <div class="demo-cell">Song 8</div>
+          <div class="demo-cell">Song 9</div>
+        </div>
+        <div class="demo-controls">
+          <button id="demo-call-btn" class="btn btn-primary" style="margin-bottom: 1rem;">🎵 Play Next Track</button>
+          <p id="demo-text-hint" style="font-size: 0.85rem; color: var(--text-muted);">Click the button to simulate the Host playing a song!</p>
+        </div>
+      </div>
+      
+      <div style="text-align: left; display: flex; flex-direction: column; gap: 1.5rem;">
+        <h3 style="font-size: 2rem;">How Patrons Play</h3>
+        <p style="color: var(--text-muted);">When players scan your custom QR code on their tables, they get a gorgeous neon card displaying 9 random tracks from your playlist. As the host plays music, players listen and daub called tracks.</p>
+        <p style="color: var(--text-muted);">The moment someone hits a line or full house, the system alerts the host and triggers screen fireworks. Patrons never have to shout or wait—wins are verified instantly.</p>
+        <div style="max-width: 250px; border-radius: 1rem; overflow: hidden; border: 1px solid var(--glass-border);">
+          <img src="assets/phone_mockup.jpg" alt="Player Mobile Screen Mockup" style="width: 100%; display: block;">
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Sales Calculator Section -->
+  <section id="calculator">
+    <h2 class="section-title">Calculate Your Venue Lift</h2>
+    <p class="section-subtitle">See how hosting a single weekly Musical Bingo night directly increases your average patron bar tab spend.</p>
+    
+    <div class="calc-card">
+      <h3 style="font-size: 1.5rem; margin-bottom: 0.5rem;">Patrons Attending</h3>
+      <p style="color: var(--text-muted); font-size: 0.9rem;">Drag the slider to match your estimated venue turnout.</p>
+      
+      <input type="range" id="player-slider" class="range-slider" min="20" max="150" value="60">
+      
+      <div style="font-size: 1.25rem; font-weight: bold; color: white;">
+        Estimated Player Attendance: <span id="player-count" style="color: var(--primary);">60</span> players
+      </div>
+      
+      <div class="calc-result" id="revenue-result">£1,458</div>
+      
+      <p style="color: var(--text-muted); font-size: 0.85rem; max-width: 450px; margin: 0 auto;">
+        *Calculated based on standard bar industry data showing £18 average patron beverage spend, combined with a 35% average increase in visit length and repeat orders.
+      </p>
+    </div>
+  </section>
+
+  <!-- Pricing Tiers -->
+  <section id="pricing" style="border-top: 1px solid var(--glass-border);">
+    <h2 class="section-title">Simple Venue Pricing</h2>
+    <p class="section-subtitle">Choose a plan that fits your entertainment operations, from single local pubs to event booking agencies.</p>
+    
+    <div class="pricing-grid">
+      <div class="price-card">
+        <h3>Pub Basic</h3>
+        <p style="color: var(--text-muted);">Best for small local bars.</p>
+        <div class="price">£29<span>/mo</span></div>
+        <ul class="price-features">
+          <li>1 Active Room Code</li>
+          <li>Default Playlists Access</li>
+          <li>Offline Batch Runner Mode</li>
+          <li>Local Audio MP3/WAV Player</li>
+          <li>Standard Support</li>
+        </ul>
+        <a href="#contact" class="btn btn-secondary" style="width: 100%;">Select Package</a>
+      </div>
+
+      <div class="price-card popular">
+        <div class="popular-badge">Popular</div>
+        <h3>Entertainment Pro</h3>
+        <p style="color: var(--text-muted);">Best for event hosts & large bars.</p>
+        <div class="price">£59<span>/mo</span></div>
+        <ul class="price-features">
+          <li>Unlimited Room Rooms</li>
+          <li>Custom Branding & Color Themes</li>
+          <li>Spotify Autoplay Integration</li>
+          <li>End-of-Game Promo Image Uploads</li>
+          <li>Custom End Redirect URL links</li>
+          <li>Premium 24/7 Support</li>
+        </ul>
+        <a href="#contact" class="btn btn-primary" style="width: 100%;">Get Started</a>
+      </div>
+
+      <div class="price-card">
+        <h3>Agency Network</h3>
+        <p style="color: var(--text-muted);">Best for multiple venues & agencies.</p>
+        <div class="price">£129<span>/mo</span></div>
+        <ul class="price-features">
+          <li>Up to 10 Simultaneous Rooms</li>
+          <li>Full Custom Whitelabeling</li>
+          <li>Centralized Branding Controls</li>
+          <li>Exportable Performance Analytics</li>
+          <li>Priority Account Manager</li>
+        </ul>
+        <a href="#contact" class="btn btn-secondary" style="width: 100%;">Contact Sales</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- Pitch Sign Up Form -->
+  <section id="contact" style="border-top: 1px solid var(--glass-border);">
+    <div class="contact-container">
+      <div style="text-align: left; display: flex; flex-direction: column; gap: 1.5rem;">
+        <h2 style="font-size: 2.5rem; line-height: 1.15;">Host a Free Demo Night at Your Venue</h2>
+        <p style="color: var(--text-muted); font-size: 1.1rem;">Ready to fill tables on slow weeknights? Let us set up a free trial game room for your staff or patrons to test out hands-free Spotify play and mobile cards.</p>
+        <div style="display: flex; flex-direction: column; gap: 0.75rem; color: var(--text-muted); font-size: 0.95rem;">
+          <p>📞 Phone support: +44 (0) 20 8123 4567</p>
+          <p>✉️ Email enquiries: sales@musicalbingo.co.uk</p>
+        </div>
+      </div>
+      
+      <form class="contact-form" onsubmit="event.preventDefault(); alert('Demo request received! We will contact you shortly.');">
+        <div class="form-group">
+          <label for="contact-name">Your Name</label>
+          <input type="text" id="contact-name" placeholder="John Smith" required>
+        </div>
+        <div class="form-group">
+          <label for="contact-venue">Venue Name</label>
+          <input type="text" id="contact-venue" placeholder="The Royal Oak Pub" required>
+        </div>
+        <div class="form-group">
+          <label for="contact-email">Email Address</label>
+          <input type="email" id="contact-email" placeholder="john@smithbars.com" required>
+        </div>
+        <div class="form-group">
+          <label for="contact-interest">Interest Level</label>
+          <select id="contact-interest">
+            <option>Request Free Demo Night</option>
+            <option>Purchase Entertainment Pro Plan</option>
+            <option>Other / Question</option>
+          </select>
+        </div>
+        <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 0.5rem;">Send Request</button>
+      </form>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer>
+    <div class="footer-logo">🎵 Musical Bingo</div>
+    <p style="margin-bottom: 0.5rem;">© 2026 Musical Bingo. All rights reserved.</p>
+    <p style="font-size: 0.8rem; color: rgba(255,255,255,0.2);">Spotify is a trademark of Spotify AB. This application is not officially endorsed or affiliated with Spotify AB.</p>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
