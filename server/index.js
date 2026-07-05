@@ -789,12 +789,15 @@ app.get('/api/spotify/playlists', async (req, res) => {
     }
     
     const data = await response.json();
-    const playlists = (data.items || []).map(p => ({
-      id: p.id,
-      name: p.name,
-      url: p.external_urls.spotify,
-      tracksCount: p.tracks.total
-    }));
+    const playlists = (data.items || []).map(p => {
+      if (!p) return null;
+      return {
+        id: p.id || '',
+        name: p.name || 'Unnamed Playlist',
+        url: p.external_urls ? p.external_urls.spotify : '',
+        tracksCount: (p.tracks && p.tracks.total) ? p.tracks.total : 0
+      };
+    }).filter(Boolean);
     
     res.json({ success: true, playlists });
   } catch (err) {
