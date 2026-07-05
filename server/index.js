@@ -721,11 +721,14 @@ app.post('/api/spotify/import', async (req, res) => {
     const tracks = playlistData.items || [];
     
     const formattedPlaylist = tracks
-      .filter(item => item.track)
+      .filter(item => {
+        const t = item.item || item.track;
+        return t && typeof t === 'object' && t.name;
+      })
       .map(item => {
-        const t = item.track;
+        const t = item.item || item.track;
         const name = t.name;
-        const artists = t.artists.map(a => a.name).join(', ');
+        const artists = t.artists ? t.artists.map(a => a.name).join(', ') : '';
         return {
           name: `${name} - ${artists}`,
           uri: t.uri
@@ -791,11 +794,12 @@ app.get('/api/spotify/playlists', async (req, res) => {
     const data = await response.json();
     const playlists = (data.items || []).map(p => {
       if (!p) return null;
+      const tracksObj = p.items || p.tracks;
       return {
         id: p.id || '',
         name: p.name || 'Unnamed Playlist',
         url: p.external_urls ? p.external_urls.spotify : '',
-        tracksCount: (p.tracks && p.tracks.total) ? p.tracks.total : 0
+        tracksCount: (tracksObj && tracksObj.total) ? tracksObj.total : 0
       };
     }).filter(Boolean);
     
