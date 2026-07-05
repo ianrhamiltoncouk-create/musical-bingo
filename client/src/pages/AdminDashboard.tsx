@@ -372,6 +372,30 @@ const AdminDashboard: React.FC = () => {
     }
   };
 
+  const handleConnectSpotify = async () => {
+    if (!game) return;
+    try {
+      localStorage.setItem('mb_spotify_client_id', spotifyClientId);
+      localStorage.setItem('mb_spotify_client_secret', spotifyClientSecret);
+      
+      // Auto-save to database first
+      await fetch(`${API_BASE}/api/spotify/credentials`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          gameId: game.id,
+          clientId: spotifyClientId,
+          clientSecret: spotifyClientSecret
+        })
+      });
+    } catch (e) {
+      console.error('Failed to auto-save credentials:', e);
+    }
+    
+    // Redirect to Spotify login
+    window.location.href = `${API_BASE}/api/spotify/login?gameId=${game.id}&origin=${encodeURIComponent(window.location.origin)}`;
+  };
+
   const importSpotifyPlaylist = async (urlOverride?: string) => {
     const targetUrl = urlOverride || spotifyPlaylistUrl;
     if (!game || !targetUrl) return;
@@ -1752,8 +1776,8 @@ const AdminDashboard: React.FC = () => {
                     <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.35rem' }}>
                       Status: {spotifyConnected ? <span style={{ color: 'var(--success)', fontWeight: 'bold' }}>Connected ✅</span> : <span style={{ color: 'var(--warning)', fontWeight: 'bold' }}>Disconnected ❌</span>}
                     </label>
-                    <a 
-                      href={`${API_BASE}/api/spotify/login?gameId=${game?.id}&origin=${encodeURIComponent(window.location.origin)}`}
+                    <button 
+                      onClick={handleConnectSpotify}
                       className="button"
                       style={{ 
                         display: 'block', 
@@ -1764,11 +1788,13 @@ const AdminDashboard: React.FC = () => {
                         padding: '0.4rem 0.75rem',
                         borderRadius: '0.5rem',
                         fontWeight: 'bold',
-                        border: spotifyConnected ? '1px solid rgba(255,255,255,0.1)' : 'none'
+                        border: spotifyConnected ? '1px solid rgba(255,255,255,0.1)' : 'none',
+                        width: '100%',
+                        cursor: 'pointer'
                       }}
                     >
                       {spotifyConnected ? 'Re-Connect Spotify Account' : 'Connect Spotify Account'}
-                    </a>
+                    </button>
 
                     {spotifyConnected && (
                       <div style={{ marginTop: '0.75rem' }}>
@@ -2255,8 +2281,8 @@ const AdminDashboard: React.FC = () => {
                             </span>
                           </div>
                           
-                          <a 
-                            href={`${API_BASE}/api/spotify/login?gameId=${game?.id}&origin=${encodeURIComponent(window.location.origin)}`}
+                          <button 
+                            onClick={handleConnectSpotify}
                             className="button"
                             style={{ 
                               display: 'block', 
@@ -2268,11 +2294,13 @@ const AdminDashboard: React.FC = () => {
                               borderRadius: '0.5rem',
                               fontWeight: 'bold',
                               border: spotifyConnected ? '1px solid rgba(255,255,255,0.1)' : 'none',
-                              margin: '0 0 0.5rem 0'
+                              margin: '0 0 0.5rem 0',
+                              width: '100%',
+                              cursor: 'pointer'
                             }}
                           >
                             {spotifyConnected ? '🔄 Re-Connect Spotify Account' : '🔗 Connect Spotify Account'}
-                          </a>
+                          </button>
                         </div>
 
                         {spotifyConnected ? (
