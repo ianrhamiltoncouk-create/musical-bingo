@@ -41,6 +41,14 @@ const AdminDashboard: React.FC = () => {
   const [hostIp, setHostIp] = useState<string>('localhost');
   const [isPresenterMode, setIsPresenterMode] = useState<boolean>(false);
   const [redirectUrlInput, setRedirectUrlInput] = useState<string>('');
+  const [playlistCollapsed, setPlaylistCollapsed] = useState<boolean>(false);
+  const [historyCollapsed, setHistoryCollapsed] = useState<boolean>(false);
+  const [importConflictPrompt, setImportConflictPrompt] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onResolve: (action: 'APPEND' | 'OVERWRITE' | 'CANCEL') => void;
+  } | null>(null);
   const [redirectDelay, setRedirectDelay] = useState<number>(30);
   const [autoRedirectEnabled, setAutoRedirectEnabled] = useState<boolean>(true);
   const [presenterWinOverlay, setPresenterWinOverlay] = useState<{ type: string; winners: { id: string; name?: string }[]; winningNumber: number | null } | null>(null);
@@ -396,37 +404,48 @@ const AdminDashboard: React.FC = () => {
     window.location.href = `${API_BASE}/api/spotify/login?gameId=${game.id}&origin=${encodeURIComponent(window.location.origin)}`;
   };
 
-  const importSpotifyPlaylist = async (urlOverride?: string) => {
-    const targetUrl = urlOverride || spotifyPlaylistUrl;
-    if (!game || !targetUrl) return;
-    
-    let isAppend = false;
-    if (playlist.length > 0) {
-      isAppend = window.confirm(
-        "A playlist already exists. Would you like to APPEND these tracks to the end of it? (Click Cancel to OVERWRITE it instead)"
-      );
-    }
-
+  const executeSpotifyImport = async (targetUrl: string, append: boolean) => {
     try {
       const res = await fetch(`${API_BASE}/api/spotify/import`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          gameId: game.id,
+          gameId: game!.id,
           playlistUrl: targetUrl,
-          append: isAppend
+          append: append
         })
       });
       if (res.ok) {
         const data = await res.json();
         alert(`Successfully imported ${data.tracksCount} tracks from Spotify!`);
-        await fetchGame(game.id);
+        setAudioFiles([]);
+        await fetchGame(game!.id);
       } else {
         const err = await res.json();
         alert(`Failed to import: ${err.error}`);
       }
     } catch (e) {
       console.error(e);
+    }
+  };
+
+  const importSpotifyPlaylist = async (urlOverride?: string) => {
+    const targetUrl = urlOverride || spotifyPlaylistUrl;
+    if (!game || !targetUrl) return;
+    
+    if (playlist.length > 0) {
+      setImportConflictPrompt({
+        isOpen: true,
+        title: "Import Spotify Playlist",
+        message: "A playlist already exists in this game. Would you like to add these tracks to your existing list, or completely replace it?",
+        onResolve: async (action) => {
+          setImportConflictPrompt(null);
+          if (action === 'CANCEL') return;
+          await executeSpotifyImport(targetUrl, action === 'APPEND');
+        }
+      });
+    } else {
+      await executeSpotifyImport(targetUrl, false);
     }
   };
 
@@ -1807,25 +1826,51 @@ const AdminDashboard: React.FC = () => {
                     <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.35rem' }}>
                       Status: {spotifyConnected ? <span style={{ color: 'var(--success)', fontWeight: 'bold' }}>Connected ✅</span> : <span style={{ color: 'var(--warning)', fontWeight: 'bold' }}>Disconnected ❌</span>}
                     </label>
-                    <button 
-                      onClick={handleConnectSpotify}
-                      className="button"
-                      style={{ 
-                        display: 'block', 
-                        textAlign: 'center', 
-                        background: spotifyConnected ? 'rgba(255,255,255,0.05)' : '#1db954', 
-                        color: 'white', 
-                        fontSize: '0.75rem', 
-                        padding: '0.4rem 0.75rem',
-                        borderRadius: '0.5rem',
-                        fontWeight: 'bold',
-                        border: spotifyConnected ? '1px solid rgba(255,255,255,0.1)' : 'none',
-                        width: '100%',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      {spotifyConnected ? 'Re-Connect Spotify Account' : 'Connect Spotify Account'}
-                    </button>
+                    {spotifyConnected ? (
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(29, 185, 84, 0.1)', border: '1px solid rgba(29, 185, 84, 0.2)', padding: '0.5rem 0.75rem', borderRadius: '0.5rem', marginBottom: '0.75rem', width: '100%' }}>
+                        <span style={{ fontSize: '0.75rem', color: '#1db954', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                          🟢 Spotify Connected
+                        </span>
+                        <button 
+                          onClick={handleConnectSpotify}
+                          style={{ 
+                            background: 'rgba(255,255,255,0.05)', 
+                            color: 'var(--text-muted)', 
+                            fontSize: '0.65rem', 
+                            padding: '0.25rem 0.5rem',
+                            borderRadius: '0.25rem',
+                            border: '1px solid rgba(255,255,255,0.1)',
+                            width: 'auto',
+                            height: 'auto',
+                            margin: 0,
+                            boxShadow: 'none',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          Switch User
+                        </button>
+                      </div>
+                    ) : (
+                      <button 
+                        onClick={handleConnectSpotify}
+                        className="button"
+                        style={{ 
+                          display: 'block', 
+                          textAlign: 'center', 
+                          background: '#1db954', 
+                          color: 'white', 
+                          fontSize: '0.75rem', 
+                          padding: '0.4rem 0.75rem',
+                          borderRadius: '0.5rem',
+                          fontWeight: 'bold',
+                          border: 'none',
+                          width: '100%',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        🔗 Connect Spotify Account
+                      </button>
+                    )}
 
                     {spotifyConnected && (
                       <div style={{ marginTop: '0.75rem' }}>
@@ -2312,26 +2357,52 @@ const AdminDashboard: React.FC = () => {
                             </span>
                           </div>
                           
-                          <button 
-                            onClick={handleConnectSpotify}
-                            className="button"
-                            style={{ 
-                              display: 'block', 
-                              textAlign: 'center', 
-                              background: spotifyConnected ? 'rgba(255,255,255,0.05)' : '#1db954', 
-                              color: 'white', 
-                              fontSize: '0.75rem', 
-                              padding: '0.4rem',
-                              borderRadius: '0.5rem',
-                              fontWeight: 'bold',
-                              border: spotifyConnected ? '1px solid rgba(255,255,255,0.1)' : 'none',
-                              margin: '0 0 0.5rem 0',
-                              width: '100%',
-                              cursor: 'pointer'
-                            }}
-                          >
-                            {spotifyConnected ? '🔄 Re-Connect Spotify Account' : '🔗 Connect Spotify Account'}
-                          </button>
+                          {spotifyConnected ? (
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(29, 185, 84, 0.1)', border: '1px solid rgba(29, 185, 84, 0.2)', padding: '0.5rem 0.75rem', borderRadius: '0.5rem', marginBottom: '0.5rem', width: '100%' }}>
+                              <span style={{ fontSize: '0.75rem', color: '#1db954', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                                🟢 Spotify Connected
+                              </span>
+                              <button 
+                                onClick={handleConnectSpotify}
+                                style={{ 
+                                  background: 'rgba(255,255,255,0.05)', 
+                                  color: 'var(--text-muted)', 
+                                  fontSize: '0.65rem', 
+                                  padding: '0.25rem 0.5rem',
+                                  borderRadius: '0.25rem',
+                                  border: '1px solid rgba(255,255,255,0.1)',
+                                  width: 'auto',
+                                  height: 'auto',
+                                  margin: 0,
+                                  boxShadow: 'none',
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                Switch User
+                              </button>
+                            </div>
+                          ) : (
+                            <button 
+                              onClick={handleConnectSpotify}
+                              className="button"
+                              style={{ 
+                                display: 'block', 
+                                textAlign: 'center', 
+                                background: '#1db954', 
+                                color: 'white', 
+                                fontSize: '0.75rem', 
+                                padding: '0.4rem',
+                                borderRadius: '0.5rem',
+                                fontWeight: 'bold',
+                                border: 'none',
+                                margin: '0 0 0.5rem 0',
+                                width: '100%',
+                                cursor: 'pointer'
+                              }}
+                            >
+                              🔗 Connect Spotify Account
+                            </button>
+                          )}
                         </div>
 
                         {spotifyConnected ? (
@@ -2590,34 +2661,45 @@ const AdminDashboard: React.FC = () => {
                             const parsedNew = playlistInput.split('\n').filter(line => line.trim() !== '');
                             if (parsedNew.length === 0) return;
                             
-                            let finalPlaylist = parsedNew;
-                            if (playlist.length > 0) {
-                              const append = window.confirm("A playlist already exists. Would you like to APPEND these tracks to the end of it? (Click Cancel to OVERWRITE it instead)");
-                              if (append) {
-                                finalPlaylist = [...playlist, ...parsedNew];
+                            const saveTextPlaylist = async (append: boolean) => {
+                              const finalPlaylist = append ? [...playlist, ...parsedNew] : parsedNew;
+                              
+                              if (finalPlaylist.length < 9) {
+                                alert('Please provide at least 9 tracks.');
+                                return;
                               }
-                            }
-                            
-                            if (finalPlaylist.length < 9) {
-                              alert('Please provide at least 9 tracks.');
-                              return;
-                            }
 
-                            try {
-                              const res = await fetch(`${API_BASE}/api/game/redirect-settings`, {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({
-                                  gameId: game.id,
-                                  playlist: finalPlaylist
-                                })
-                              });
-                              if (res.ok) {
-                                alert('Text playlist saved successfully!');
-                                await fetchGame(game.id);
+                              try {
+                                const res = await fetch(`${API_BASE}/api/game/redirect-settings`, {
+                                  method: 'POST',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({
+                                    gameId: game.id,
+                                    playlist: finalPlaylist
+                                  })
+                                });
+                                if (res.ok) {
+                                  alert('Text playlist saved successfully!');
+                                  await fetchGame(game.id);
+                                }
+                              } catch (e) {
+                                console.error(e);
                               }
-                            } catch (e) {
-                              console.error(e);
+                            };
+
+                            if (playlist.length > 0) {
+                              setImportConflictPrompt({
+                                isOpen: true,
+                                title: "Save Custom Playlist",
+                                message: "A playlist already exists in this game. Would you like to add these tracks to your existing list, or completely replace it?",
+                                onResolve: async (action) => {
+                                  setImportConflictPrompt(null);
+                                  if (action === 'CANCEL') return;
+                                  await saveTextPlaylist(action === 'APPEND');
+                                }
+                              });
+                            } else {
+                              await saveTextPlaylist(false);
                             }
                           }}
                           style={{ 
@@ -2644,8 +2726,11 @@ const AdminDashboard: React.FC = () => {
                   ) : (
                     <>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-                        <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                          📋 {playlist.length} Playlist Tracks
+                        <span 
+                          onClick={() => setPlaylistCollapsed(!playlistCollapsed)}
+                          style={{ fontSize: '0.8rem', color: 'var(--text-muted)', cursor: 'pointer', userSelect: 'none', display: 'flex', alignItems: 'center', gap: '0.35rem' }}
+                        >
+                          📋 {playlist.length} Playlist Tracks {playlistCollapsed ? '▼' : '▲'}
                         </span>
                         <button 
                           onClick={async () => {
@@ -2684,6 +2769,9 @@ const AdminDashboard: React.FC = () => {
                           🗑️ Clear Playlist
                         </button>
                       </div>
+
+                      {!playlistCollapsed && (
+                        <>
 
                       <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '1rem', marginTop: '0.5rem' }}>
                         <input 
@@ -2905,28 +2993,35 @@ const AdminDashboard: React.FC = () => {
                   )}
                 </>
               )}
+                </>
+              )}
 
               <div style={{ marginTop: '1.5rem', textAlign: 'left' }}>
-                <h4 style={{ margin: '0 0 0.75rem 0', fontSize: '0.9rem', color: 'var(--text-muted)' }}>
-                  {game.game_type === 'NUMERIC' ? 'Called Numbers History:' : 'Called Songs History:'}
+                <h4 
+                  onClick={() => setHistoryCollapsed(!historyCollapsed)}
+                  style={{ margin: '0 0 0.75rem 0', fontSize: '0.9rem', color: 'var(--text-muted)', cursor: 'pointer', userSelect: 'none', display: 'flex', alignItems: 'center', gap: '0.35rem' }}
+                >
+                  {game.game_type === 'NUMERIC' ? 'Called Numbers History' : 'Called Songs History'} {historyCollapsed ? '▼' : '▲'}
                 </h4>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '180px', overflowY: 'auto', paddingRight: '0.5rem' }}>
-                  {calledNumbers.slice().reverse().map((num, idx) => (
-                    <div key={num} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', background: 'rgba(255,255,255,0.02)', padding: '0.4rem 0.75rem', borderRadius: '0.5rem' }}>
-                      <span>{(() => {
-                        if (game.game_type === 'NUMERIC') return `Number ${num}`;
-                        const item = playlist[num - 1];
-                        return item ? (typeof item === 'object' && item !== null ? (item as any).name : item) : `Song #${num}`;
-                      })()}</span>
-                      <span style={{ opacity: 0.5 }}>#{calledNumbers.length - idx}</span>
-                    </div>
-                  ))}
-                  {calledNumbers.length === 0 && (
-                    <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem', fontStyle: 'italic' }}>
-                      {game.game_type === 'NUMERIC' ? 'No numbers called yet.' : 'No songs called yet.'}
-                    </div>
-                  )}
-                </div>
+                {!historyCollapsed && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '180px', overflowY: 'auto', paddingRight: '0.5rem' }}>
+                    {calledNumbers.slice().reverse().map((num, idx) => (
+                      <div key={num} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', background: 'rgba(255,255,255,0.02)', padding: '0.4rem 0.75rem', borderRadius: '0.5rem' }}>
+                        <span>{(() => {
+                          if (game.game_type === 'NUMERIC') return `Number ${num}`;
+                          const item = playlist[num - 1];
+                          return item ? (typeof item === 'object' && item !== null ? (item as any).name : item) : `Song #${num}`;
+                        })()}</span>
+                        <span style={{ opacity: 0.5 }}>#{calledNumbers.length - idx}</span>
+                      </div>
+                    ))}
+                    {calledNumbers.length === 0 && (
+                      <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem', fontStyle: 'italic' }}>
+                        {game.game_type === 'NUMERIC' ? 'No numbers called yet.' : 'No songs called yet.'}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
               
               <div style={{ 
@@ -3356,6 +3451,50 @@ const AdminDashboard: React.FC = () => {
       })()}
         </div>
       </div>
+
+      {importConflictPrompt && importConflictPrompt.isOpen && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          width: '100vw',
+          height: '100vh',
+          background: 'rgba(13, 5, 38, 0.85)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 30000,
+          backdropFilter: 'blur(8px)',
+          padding: '1rem'
+        }}>
+          <div className="card" style={{ maxWidth: '400px', width: '100%', border: '2px solid var(--accent)', margin: 0, padding: '1.5rem', textAlign: 'center' }}>
+            <h2 style={{ fontSize: '1.3rem', marginBottom: '1rem' }}>{importConflictPrompt.title}</h2>
+            <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)', marginBottom: '1.5rem', lineHeight: '1.5' }}>
+              {importConflictPrompt.message}
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              <button 
+                onClick={() => importConflictPrompt.onResolve('APPEND')}
+                style={{ background: 'var(--secondary)', width: '100%', margin: 0 }}
+              >
+                ➕ Add to Existing List
+              </button>
+              <button 
+                onClick={() => importConflictPrompt.onResolve('OVERWRITE')}
+                style={{ background: '#ef4444', borderColor: '#ef4444', width: '100%', margin: 0 }}
+              >
+                🔄 Replace Playlist
+              </button>
+              <button 
+                onClick={() => importConflictPrompt.onResolve('CANCEL')}
+                style={{ background: 'rgba(255,255,255,0.05)', borderColor: 'rgba(255,255,255,0.15)', color: 'var(--text-muted)', width: '100%', margin: 0 }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
