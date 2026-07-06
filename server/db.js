@@ -36,6 +36,7 @@ async function initDb() {
       primary_color TEXT DEFAULT '#ec4899',
       secondary_color TEXT DEFAULT '#6366f1',
       background_color TEXT DEFAULT '#0d0526',
+      host_device_id TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
@@ -163,6 +164,9 @@ async function initDb() {
   } catch (e) {}
   try {
     await db.exec(`ALTER TABLE games ADD COLUMN target_winner_step INTEGER DEFAULT 30;`);
+  } catch (e) {}
+  try {
+    await db.exec(`ALTER TABLE games ADD COLUMN host_device_id TEXT;`);
   } catch (e) {}
 
   // Seed a default trial license key for testing

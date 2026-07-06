@@ -346,8 +346,11 @@ app.post('/api/game/create', async (req, res) => {
     const newGameId = uuidv4();
     const roomCode = await generateUniqueRoomCode(db);
     
-    // Fetch last game configuration to copy over branding, settings, and Spotify credentials
-    const lastGame = await db.get('SELECT * FROM games ORDER BY created_at DESC LIMIT 1');
+    // Fetch last game configuration to copy over branding, settings, and Spotify credentials for this specific device and license
+    const lastGame = await db.get(
+      'SELECT * FROM games WHERE license_key = ? AND host_device_id = ? ORDER BY created_at DESC LIMIT 1',
+      [license.license_key, deviceId]
+    );
     
     const type = gameType || 'MUSIC';
     const mode = gameMode || 'SINGLE_WINNER';
@@ -422,15 +425,17 @@ app.post('/api/game/create', async (req, res) => {
         time_limit_enabled, duration_limit, snippet_limit, target_winner_step,
         company_name, logo_url, primary_color, secondary_color, background_color,
         redirect_url, redirect_delay, auto_redirect_enabled, promo_image, promo_image_delay,
-        spotify_client_id, spotify_client_secret, spotify_access_token, spotify_refresh_token, spotify_playlist_url
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        spotify_client_id, spotify_client_secret, spotify_access_token, spotify_refresh_token, spotify_playlist_url,
+        host_device_id
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         newGameId, 'WAITING', roomCode, playlistJson, type, mode, anchors, license.license_key, 
         targetLineInt, targetTwoLinesInt, targetFullHouseInt, gridSz, freeSp, 
         timeLim, durLim, snipLim, targetWinStep,
         companyName, logoUrl, primaryColor, secondaryColor, backgroundColor,
         redirectUrl, redirectDelay, autoRedirectEnabled, promoImage, promoImageDelay,
-        spotifyClientId, spotifyClientSecret, spotifyAccessToken, spotifyRefreshToken, spotifyPlaylistUrl
+        spotifyClientId, spotifyClientSecret, spotifyAccessToken, spotifyRefreshToken, spotifyPlaylistUrl,
+        deviceId
       ]
     );
     const game = await db.get('SELECT * FROM games WHERE id = ?', [newGameId]);
@@ -927,6 +932,58 @@ app.post('/api/game/join', async (req, res) => {
   res.json({ playerId, card, sessionToken, gameId: game.id, roomCode: game.room_code });
 });
 
+function songMatches(title, playlistSong) {
+  if (!title || !playlistSong) return false;
+  
+  // Normalize accents and keep only alphanumeric and spaces
+  const cleanToWords = s => s
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean);
+    
+  const wordsTitle = cleanToWords(title);
+  const wordsPlaylist = cleanToWords(playlistSong);
+  
+  if (wordsTitle.length === 0 || wordsPlaylist.length === 0) return false;
+  
+  // Words to ignore in matching (common stop words or music terms)
+  const ignore = new Set(['the', 'a', 'an', 'and', 'or', 'feat', 'ft', 'remix', 'with', 'by', 'version', 'single', 'album', 'edit', 'radio']);
+  const filterWords = words => words.filter(w => !ignore.has(w) && w.length > 1);
+  
+  const titleFiltered = filterWords(wordsTitle);
+  const playlistFiltered = filterWords(wordsPlaylist);
+  
+  // Fall back to raw words if everything was filtered out
+  const tCompare = titleFiltered.length > 0 ? titleFiltered : wordsTitle;
+  const pCompare = playlistFiltered.length > 0 ? playlistFiltered : wordsPlaylist;
+  
+  // Count matches
+  let matchCount = 0;
+  for (const w of pCompare) {
+    if (tCompare.includes(w)) {
+      matchCount++;
+    }
+  }
+  
+  const ratio = matchCount / pCompare.length;
+  if (ratio >= 0.6) return true; // 60% of playlist song words found in title
+  
+  // Reverse check
+  let revMatchCount = 0;
+  for (const w of tCompare) {
+    if (pCompare.includes(w)) {
+      revMatchCount++;
+    }
+  }
+  const revRatio = revMatchCount / tCompare.length;
+  if (revRatio >= 0.6) return true; // 60% of title words found in playlist song
+  
+  return false;
+}
+
 // Spotify sync pollers map
 const spotifyPollers = new Map();
 
@@ -957,27 +1014,27 @@ io.on('connection', (socket) => {
           return;
         }
 
-        exec('powershell -Command "Get-Process spotify -ErrorAction SilentlyContinue | Where-Object {$_.MainWindowTitle} | Select-Object -ExpandProperty MainWindowTitle"', async (err, stdout, stderr) => {
-          if (err || !stdout) return;
-          const title = stdout.trim();
-          if (!title || title === lastTitle) return;
-          lastTitle = title;
+        let title = '';
+        let matched = false;
+
+        const processTitle = async (detectedTitle) => {
+          if (!detectedTitle || detectedTitle === lastTitle) return;
+          lastTitle = detectedTitle;
 
           const forbiddenTitles = ['spotify', 'spotify free', 'spotify premium', 'advertisement'];
-          if (forbiddenTitles.includes(title.toLowerCase()) || title.toLowerCase().startsWith('spotify ')) {
+          if (forbiddenTitles.includes(detectedTitle.toLowerCase()) || detectedTitle.toLowerCase().startsWith('spotify ')) {
             return;
           }
 
-          console.log(`[Spotify Sync] Detected track playing: "${title}"`);
+          console.log(`[Spotify Sync] Detected track playing: "${detectedTitle}"`);
 
           const playlist = JSON.parse(game.playlist || '[]');
-          const clean = s => s.toLowerCase().replace(/[^a-z0-9]/g, '');
-          const cleanTitle = clean(title);
 
           let matchedIndex = -1;
           for (let i = 0; i < playlist.length; i++) {
-            const cleanPlaylistSong = clean(playlist[i]);
-            if (cleanTitle.includes(cleanPlaylistSong) || cleanPlaylistSong.includes(cleanTitle)) {
+            const item = playlist[i];
+            const songName = (item && typeof item === 'object' && item.name) ? item.name : (typeof item === 'string' ? item : '');
+            if (songMatches(detectedTitle, songName)) {
               matchedIndex = i;
               break;
             }
@@ -988,7 +1045,8 @@ io.on('connection', (socket) => {
             const alreadyCalled = await db.get('SELECT 1 FROM called_numbers WHERE game_id = ? AND number = ?', [gameId, songId]);
             
             if (!alreadyCalled) {
-              console.log(`[Spotify Sync] Auto-calling matched song: "${playlist[matchedIndex]}" (ID: ${songId})`);
+              const displaySong = typeof playlist[matchedIndex] === 'object' && playlist[matchedIndex] !== null ? playlist[matchedIndex].name : playlist[matchedIndex];
+              console.log(`[Spotify Sync] Auto-calling matched song: "${displaySong}" (ID: ${songId})`);
               await db.run('INSERT INTO called_numbers (game_id, number) VALUES (?, ?)', [gameId, songId]);
               
               const called = await db.all('SELECT number FROM called_numbers WHERE game_id = ? ORDER BY called_at ASC', [gameId]);
@@ -1045,7 +1103,44 @@ io.on('connection', (socket) => {
               }
             }
           }
-        });
+        };
+
+        if (game.spotify_access_token) {
+          try {
+            let response = await fetch('https://api.spotify.com/v1/me/player/currently-playing', {
+              headers: { 'Authorization': `Bearer ${game.spotify_access_token}` }
+            });
+            if (response.status === 401) {
+              const newToken = await refreshSpotifyToken(gameId);
+              if (newToken) {
+                response = await fetch('https://api.spotify.com/v1/me/player/currently-playing', {
+                  headers: { 'Authorization': `Bearer ${newToken}` }
+                });
+              }
+            }
+            if (response.ok && response.status !== 204) {
+              const data = await response.json();
+              if (data && data.item && data.item.name) {
+                const songName = data.item.name;
+                const artists = data.item.artists ? data.item.artists.map(a => a.name).join(', ') : '';
+                title = `${songName} - ${artists}`;
+                matched = true;
+                await processTitle(title);
+              }
+            }
+          } catch (apiErr) {
+            console.error('[Spotify Sync API] Error fetching current track:', apiErr);
+          }
+        }
+
+        // Fallback to powershell local process detection if API didn't resolve a track (e.g. not logged in or local offline server testing)
+        if (!matched) {
+          exec('powershell -Command "Get-Process spotify -ErrorAction SilentlyContinue | Where-Object {$_.MainWindowTitle} | Select-Object -ExpandProperty MainWindowTitle"', async (err, stdout, stderr) => {
+            if (err || !stdout) return;
+            const localTitle = stdout.trim();
+            await processTitle(localTitle);
+          });
+        }
       } catch (err) {
         console.error('[Spotify Sync] Error during poll:', err);
       }
