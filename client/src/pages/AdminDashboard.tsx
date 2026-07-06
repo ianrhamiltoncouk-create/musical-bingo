@@ -972,7 +972,7 @@ const AdminDashboard: React.FC = () => {
   const playTrack = async (id: number) => {
     if (isTuningRef.current) return;
 
-    const track = audioFilesRef.current.find(t => t.id === id);
+    const track = activeImportTab === 'LOCAL_FILES' ? audioFilesRef.current.find(t => t.id === id) : null;
     if (!track) {
       if (currentPlayingId === id) {
         if (isPlaying) {
@@ -1047,6 +1047,19 @@ const AdminDashboard: React.FC = () => {
       audioRef.current.pause();
     }
 
+    // Pause Spotify if it is connected so local playback takes focus
+    if (spotifyConnected) {
+      try {
+        await fetch(`${API_BASE}/api/spotify/pause`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ gameId: game?.id })
+        });
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
     await playTuningSoundEffect();
 
     const objectUrl = URL.createObjectURL(track.file);
@@ -1077,7 +1090,7 @@ const AdminDashboard: React.FC = () => {
 
   useEffect(() => {
     playTrackRef.current = playTrack;
-  }, [playlist, audioFiles, calledNumbers, isCallingPaused, currentPlayingId, isPlaying]);
+  }, [playlist, audioFiles, calledNumbers, isCallingPaused, currentPlayingId, isPlaying, activeImportTab]);
 
   const toggleSpotifySync = () => {
     if (!game) return;
@@ -1490,6 +1503,24 @@ const AdminDashboard: React.FC = () => {
           {currentPlayingId === null 
             ? '⏸️ Pause Music' 
             : (isPlaying ? '⏸️ Pause Music' : '▶️ Resume Music')}
+        </button>
+        <button 
+          className="exit-btn" 
+          style={{ 
+            zIndex: 10, 
+            right: '25.5rem', 
+            background: '#ef4444', 
+            borderColor: '#ef4444',
+            color: 'white',
+            cursor: 'pointer'
+          }} 
+          onClick={async () => {
+            if (window.confirm("Are you sure you want to reset all called numbers and start over?")) {
+              await resetGame();
+            }
+          }}
+        >
+          🔄 Restart Calls
         </button>
         <button className="exit-btn" style={{ zIndex: 10 }} onClick={() => setIsPresenterMode(false)}>✕ Exit Fullscreen</button>
         
@@ -2686,7 +2717,7 @@ const AdminDashboard: React.FC = () => {
                         </button>
                       </div>
 
-                      {audioFiles.length > 0 ? (
+                      {activeImportTab === 'LOCAL_FILES' && audioFiles.length > 0 ? (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '240px', overflowY: 'auto', paddingRight: '0.5rem', marginBottom: '1.25rem', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '1rem', padding: '0.75rem', background: 'rgba(0,0,0,0.1)' }}>
                           <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 'bold', marginBottom: '0.25rem', textAlign: 'left' }}>Click track to Play & Call:</div>
                           {audioFiles.map(track => {
