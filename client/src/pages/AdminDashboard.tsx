@@ -594,7 +594,7 @@ const AdminDashboard: React.FC = () => {
         if (data.joinedPlayersCount !== undefined) {
           setJoinedCount(data.joinedPlayersCount);
         }
-      } else {
+      } else if (res.status === 404) {
         sessionStorage.removeItem('bingo_host_game_id');
         setGame(null);
       }
@@ -1524,14 +1524,23 @@ const AdminDashboard: React.FC = () => {
             : (isPlaying ? '⏸️ Pause Music' : '▶️ Resume Music')}
         </button>
         <button 
-          className="exit-btn" 
           style={{ 
+            position: 'absolute',
+            bottom: '2rem',
+            left: '50%',
+            transform: 'translateX(-50%)',
             zIndex: 10, 
-            right: '25.5rem', 
             background: '#ef4444', 
             borderColor: '#ef4444',
             color: 'white',
-            cursor: 'pointer'
+            cursor: 'pointer',
+            padding: '0.75rem 1.5rem',
+            fontSize: '1.05rem',
+            borderRadius: '1rem',
+            fontWeight: 'bold',
+            border: '1px solid #ef4444',
+            boxShadow: '0 4px 20px rgba(239, 68, 68, 0.4)',
+            transition: 'all 0.2s'
           }} 
           onClick={async () => {
             if (window.confirm("Are you sure you want to reset all called numbers and start over?")) {

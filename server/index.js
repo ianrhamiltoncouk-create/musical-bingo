@@ -489,6 +489,9 @@ app.post('/api/game/start', async (req, res) => {
   }
 
   await db.run('UPDATE games SET status = ?, winner_player_id = ? WHERE id = ?', ['STARTED', winnerId, game.id]);
+  if (game.spotify_access_token) {
+    startSpotifySync(game.id, io);
+  }
   io.to(game.id).emit('GAME_STARTED', { gameId: game.id });
   res.json({ success: true, winnerPlayerId: winnerId });
 });
@@ -987,167 +990,171 @@ function songMatches(title, playlistSong) {
 // Spotify sync pollers map
 const spotifyPollers = new Map();
 
+function startSpotifySync(gameId, io) {
+  if (!gameId) return;
+
+  if (spotifyPollers.has(gameId)) {
+    clearInterval(spotifyPollers.get(gameId));
+  }
+
+  console.log(`[Spotify Sync] Starting sync process for game: ${gameId}`);
+  let lastTitle = '';
+
+  const intervalId = setInterval(async () => {
+    try {
+      const db = getDb();
+      const game = await db.get('SELECT * FROM games WHERE id = ?', [gameId]);
+      if (!game || game.status === 'FINISHED' || game.status === 'WAITING') {
+        console.log(`[Spotify Sync] Stopping sync for game: ${gameId} (game status is finished or waiting)`);
+        clearInterval(intervalId);
+        spotifyPollers.delete(gameId);
+        io.to(gameId).emit('SPOTIFY_SYNC_STATUS', { enabled: false });
+        return;
+      }
+
+      let title = '';
+      let matched = false;
+
+      const processTitle = async (detectedTitle) => {
+        if (!detectedTitle || detectedTitle === lastTitle) return;
+        lastTitle = detectedTitle;
+
+        const forbiddenTitles = ['spotify', 'spotify free', 'spotify premium', 'advertisement'];
+        if (forbiddenTitles.includes(detectedTitle.toLowerCase()) || detectedTitle.toLowerCase().startsWith('spotify ')) {
+          return;
+        }
+
+        console.log(`[Spotify Sync] Detected track playing: "${detectedTitle}"`);
+
+        const playlist = JSON.parse(game.playlist || '[]');
+
+        let matchedIndex = -1;
+        for (let i = 0; i < playlist.length; i++) {
+          const item = playlist[i];
+          const songName = (item && typeof item === 'object' && item.name) ? item.name : (typeof item === 'string' ? item : '');
+          if (songMatches(detectedTitle, songName)) {
+            matchedIndex = i;
+            break;
+          }
+        }
+
+        if (matchedIndex !== -1) {
+          const songId = matchedIndex + 1;
+          const alreadyCalled = await db.get('SELECT 1 FROM called_numbers WHERE game_id = ? AND number = ?', [gameId, songId]);
+          
+          if (!alreadyCalled) {
+            const displaySong = typeof playlist[matchedIndex] === 'object' && playlist[matchedIndex] !== null ? playlist[matchedIndex].name : playlist[matchedIndex];
+            console.log(`[Spotify Sync] Auto-calling matched song: "${displaySong}" (ID: ${songId})`);
+            await db.run('INSERT INTO called_numbers (game_id, number) VALUES (?, ?)', [gameId, songId]);
+            
+            const called = await db.all('SELECT number FROM called_numbers WHERE game_id = ? ORDER BY called_at ASC', [gameId]);
+            const numbers = called.map(c => c.number);
+
+            io.to(gameId).emit('NUMBER_CALLED', { number: songId, allNumbers: numbers });
+
+            // Check wins!
+            const players = await db.all('SELECT * FROM players WHERE game_id = ?', [gameId]);
+            const winners = [];
+
+            const lineWinAlreadyOccurred = (await db.get('SELECT COUNT(*) as count FROM players WHERE game_id = ? AND has_line_win >= 1', [gameId])).count > 0;
+            const twoLinesWinAlreadyOccurred = (await db.get('SELECT COUNT(*) as count FROM players WHERE game_id = ? AND has_line_win = 2', [gameId])).count > 0;
+            
+            let lineWinOccurred = lineWinAlreadyOccurred;
+            let gameFinished = false;
+
+            for (const player of players) {
+              const card = JSON.parse(player.card_data);
+              const winState = checkWin(card, numbers);
+              
+              if (game.target_full_house === 1 && winState.hasFullHouse && !player.has_full_house) {
+                await db.run('UPDATE players SET has_full_house = 1 WHERE id = ?', [player.id]);
+                winners.push({ id: player.id, name: player.name, type: 'FULL_HOUSE' });
+                gameFinished = true;
+              } 
+              
+              if (game.target_line === 1 && !lineWinAlreadyOccurred && winState.hasLine && !player.has_line_win) {
+                await db.run('UPDATE players SET has_line_win = 1 WHERE id = ?', [player.id]);
+                winners.push({ id: player.id, name: player.name, type: 'LINE' });
+                lineWinOccurred = true;
+              } 
+              
+              if (game.target_two_lines === 1 && !twoLinesWinAlreadyOccurred && (lineWinOccurred || game.target_line !== 1) && winState.hasTwoLines && player.has_line_win !== 2) {
+                await db.run('UPDATE players SET has_line_win = 2 WHERE id = ?', [player.id]);
+                winners.push({ id: player.id, name: player.name, type: 'TWO_LINES' });
+              }
+            }
+
+            if (winners.length > 0) {
+              io.to(gameId).emit('WINNERS_UPDATE', { winners });
+            }
+
+            if (gameFinished) {
+              await db.run('UPDATE games SET status = ? WHERE id = ?', ['FINISHED', gameId]);
+              const updatedGame = await db.get('SELECT redirect_url, redirect_delay, auto_redirect_enabled, promo_image, promo_image_delay FROM games WHERE id = ?', [gameId]);
+              io.to(gameId).emit('GAME_FINISHED', { 
+                redirectUrl: updatedGame?.redirect_url,
+                redirectDelay: updatedGame?.redirect_delay,
+                autoRedirectEnabled: updatedGame?.auto_redirect_enabled,
+                promoImage: updatedGame?.promo_image,
+                promoImageDelay: updatedGame?.promo_image_delay
+              });
+            }
+          }
+        }
+      };
+
+      if (game.spotify_access_token) {
+        try {
+          let response = await fetch('https://api.spotify.com/v1/me/player/currently-playing', {
+            headers: { 'Authorization': `Bearer ${game.spotify_access_token}` }
+          });
+          if (response.status === 401) {
+            const newToken = await refreshSpotifyToken(gameId);
+            if (newToken) {
+              response = await fetch('https://api.spotify.com/v1/me/player/currently-playing', {
+                headers: { 'Authorization': `Bearer ${newToken}` }
+              });
+            }
+          }
+          if (response.ok && response.status !== 204) {
+            const data = await response.json();
+            if (data && data.item && data.item.name) {
+              const songName = data.item.name;
+              const artists = data.item.artists ? data.item.artists.map(a => a.name).join(', ') : '';
+              title = `${songName} - ${artists}`;
+              matched = true;
+              await processTitle(title);
+            }
+          }
+        } catch (apiErr) {
+          console.error('[Spotify Sync API] Error fetching current track:', apiErr);
+        }
+      }
+
+      // Fallback to powershell local process detection if API didn't resolve a track (e.g. not logged in or local offline server testing)
+      if (!matched) {
+        exec('powershell -Command "Get-Process spotify -ErrorAction SilentlyContinue | Where-Object {$_.MainWindowTitle} | Select-Object -ExpandProperty MainWindowTitle"', async (err, stdout, stderr) => {
+          if (err || !stdout) return;
+          const localTitle = stdout.trim();
+          await processTitle(localTitle);
+        });
+      }
+    } catch (err) {
+      console.error('[Spotify Sync] Error during poll:', err);
+    }
+  }, 3000);
+
+  spotifyPollers.set(gameId, intervalId);
+  io.to(gameId).emit('SPOTIFY_SYNC_STATUS', { enabled: true });
+}
+
 // Socket.IO Logic
 io.on('connection', (socket) => {
   console.log('User connected:', socket.id);
 
   socket.on('START_SPOTIFY_SYNC', async (data) => {
     const { gameId } = data;
-    if (!gameId) return;
-
-    if (spotifyPollers.has(gameId)) {
-      clearInterval(spotifyPollers.get(gameId));
-    }
-
-    console.log(`[Spotify Sync] Starting sync process for game: ${gameId}`);
-    let lastTitle = '';
-
-    const intervalId = setInterval(async () => {
-      try {
-        const db = getDb();
-        const game = await db.get('SELECT * FROM games WHERE id = ?', [gameId]);
-        if (!game || game.status === 'FINISHED' || game.status === 'WAITING') {
-          console.log(`[Spotify Sync] Stopping sync for game: ${gameId} (game status is finished or waiting)`);
-          clearInterval(intervalId);
-          spotifyPollers.delete(gameId);
-          io.to(gameId).emit('SPOTIFY_SYNC_STATUS', { enabled: false });
-          return;
-        }
-
-        let title = '';
-        let matched = false;
-
-        const processTitle = async (detectedTitle) => {
-          if (!detectedTitle || detectedTitle === lastTitle) return;
-          lastTitle = detectedTitle;
-
-          const forbiddenTitles = ['spotify', 'spotify free', 'spotify premium', 'advertisement'];
-          if (forbiddenTitles.includes(detectedTitle.toLowerCase()) || detectedTitle.toLowerCase().startsWith('spotify ')) {
-            return;
-          }
-
-          console.log(`[Spotify Sync] Detected track playing: "${detectedTitle}"`);
-
-          const playlist = JSON.parse(game.playlist || '[]');
-
-          let matchedIndex = -1;
-          for (let i = 0; i < playlist.length; i++) {
-            const item = playlist[i];
-            const songName = (item && typeof item === 'object' && item.name) ? item.name : (typeof item === 'string' ? item : '');
-            if (songMatches(detectedTitle, songName)) {
-              matchedIndex = i;
-              break;
-            }
-          }
-
-          if (matchedIndex !== -1) {
-            const songId = matchedIndex + 1;
-            const alreadyCalled = await db.get('SELECT 1 FROM called_numbers WHERE game_id = ? AND number = ?', [gameId, songId]);
-            
-            if (!alreadyCalled) {
-              const displaySong = typeof playlist[matchedIndex] === 'object' && playlist[matchedIndex] !== null ? playlist[matchedIndex].name : playlist[matchedIndex];
-              console.log(`[Spotify Sync] Auto-calling matched song: "${displaySong}" (ID: ${songId})`);
-              await db.run('INSERT INTO called_numbers (game_id, number) VALUES (?, ?)', [gameId, songId]);
-              
-              const called = await db.all('SELECT number FROM called_numbers WHERE game_id = ? ORDER BY called_at ASC', [gameId]);
-              const numbers = called.map(c => c.number);
-
-              io.to(gameId).emit('NUMBER_CALLED', { number: songId, allNumbers: numbers });
-
-              // Check wins!
-              const players = await db.all('SELECT * FROM players WHERE game_id = ?', [gameId]);
-              const winners = [];
-
-              const lineWinAlreadyOccurred = (await db.get('SELECT COUNT(*) as count FROM players WHERE game_id = ? AND has_line_win >= 1', [gameId])).count > 0;
-              const twoLinesWinAlreadyOccurred = (await db.get('SELECT COUNT(*) as count FROM players WHERE game_id = ? AND has_line_win = 2', [gameId])).count > 0;
-              
-              let lineWinOccurred = lineWinAlreadyOccurred;
-              let gameFinished = false;
-
-              for (const player of players) {
-                const card = JSON.parse(player.card_data);
-                const winState = checkWin(card, numbers);
-                
-                if (game.target_full_house === 1 && winState.hasFullHouse && !player.has_full_house) {
-                  await db.run('UPDATE players SET has_full_house = 1 WHERE id = ?', [player.id]);
-                  winners.push({ id: player.id, name: player.name, type: 'FULL_HOUSE' });
-                  gameFinished = true;
-                } 
-                
-                if (game.target_line === 1 && !lineWinAlreadyOccurred && winState.hasLine && !player.has_line_win) {
-                  await db.run('UPDATE players SET has_line_win = 1 WHERE id = ?', [player.id]);
-                  winners.push({ id: player.id, name: player.name, type: 'LINE' });
-                  lineWinOccurred = true;
-                } 
-                
-                if (game.target_two_lines === 1 && !twoLinesWinAlreadyOccurred && (lineWinOccurred || game.target_line !== 1) && winState.hasTwoLines && player.has_line_win !== 2) {
-                  await db.run('UPDATE players SET has_line_win = 2 WHERE id = ?', [player.id]);
-                  winners.push({ id: player.id, name: player.name, type: 'TWO_LINES' });
-                }
-              }
-
-              if (winners.length > 0) {
-                io.to(gameId).emit('WINNERS_UPDATE', { winners });
-              }
-
-              if (gameFinished) {
-                await db.run('UPDATE games SET status = ? WHERE id = ?', ['FINISHED', gameId]);
-                const updatedGame = await db.get('SELECT redirect_url, redirect_delay, auto_redirect_enabled, promo_image, promo_image_delay FROM games WHERE id = ?', [gameId]);
-                io.to(gameId).emit('GAME_FINISHED', { 
-                  redirectUrl: updatedGame?.redirect_url,
-                  redirectDelay: updatedGame?.redirect_delay,
-                  autoRedirectEnabled: updatedGame?.auto_redirect_enabled,
-                  promoImage: updatedGame?.promo_image,
-                  promoImageDelay: updatedGame?.promo_image_delay
-                });
-              }
-            }
-          }
-        };
-
-        if (game.spotify_access_token) {
-          try {
-            let response = await fetch('https://api.spotify.com/v1/me/player/currently-playing', {
-              headers: { 'Authorization': `Bearer ${game.spotify_access_token}` }
-            });
-            if (response.status === 401) {
-              const newToken = await refreshSpotifyToken(gameId);
-              if (newToken) {
-                response = await fetch('https://api.spotify.com/v1/me/player/currently-playing', {
-                  headers: { 'Authorization': `Bearer ${newToken}` }
-                });
-              }
-            }
-            if (response.ok && response.status !== 204) {
-              const data = await response.json();
-              if (data && data.item && data.item.name) {
-                const songName = data.item.name;
-                const artists = data.item.artists ? data.item.artists.map(a => a.name).join(', ') : '';
-                title = `${songName} - ${artists}`;
-                matched = true;
-                await processTitle(title);
-              }
-            }
-          } catch (apiErr) {
-            console.error('[Spotify Sync API] Error fetching current track:', apiErr);
-          }
-        }
-
-        // Fallback to powershell local process detection if API didn't resolve a track (e.g. not logged in or local offline server testing)
-        if (!matched) {
-          exec('powershell -Command "Get-Process spotify -ErrorAction SilentlyContinue | Where-Object {$_.MainWindowTitle} | Select-Object -ExpandProperty MainWindowTitle"', async (err, stdout, stderr) => {
-            if (err || !stdout) return;
-            const localTitle = stdout.trim();
-            await processTitle(localTitle);
-          });
-        }
-      } catch (err) {
-        console.error('[Spotify Sync] Error during poll:', err);
-      }
-    }, 3000);
-
-    spotifyPollers.set(gameId, intervalId);
-    io.to(gameId).emit('SPOTIFY_SYNC_STATUS', { enabled: true });
+    startSpotifySync(gameId, io);
   });
 
   socket.on('STOP_SPOTIFY_SYNC', (data) => {
