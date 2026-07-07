@@ -489,9 +489,6 @@ app.post('/api/game/start', async (req, res) => {
   }
 
   await db.run('UPDATE games SET status = ?, winner_player_id = ? WHERE id = ?', ['STARTED', winnerId, game.id]);
-  if (game.spotify_access_token) {
-    startSpotifySync(game.id, io);
-  }
   io.to(game.id).emit('GAME_STARTED', { gameId: game.id });
   res.json({ success: true, winnerPlayerId: winnerId });
 });
@@ -677,9 +674,10 @@ app.get('/api/spotify/callback', async (req, res) => {
     }
     
     const data = await response.json();
+    const finalRefreshToken = data.refresh_token || game.spotify_refresh_token || null;
     await db.run(
       'UPDATE games SET spotify_access_token = ?, spotify_refresh_token = ? WHERE id = ?',
-      [data.access_token, data.refresh_token, gameId]
+      [data.access_token, finalRefreshToken, gameId]
     );
     
     const cleanOrigin = clientOrigin.replace(/\/$/, '');

@@ -79,6 +79,7 @@ const AdminDashboard: React.FC = () => {
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const audioRef = React.useRef<HTMLAudioElement | null>(null);
   const [spotifySyncEnabled, setSpotifySyncEnabled] = useState<boolean>(false);
+  const [userManuallyDisabledSync, setUserManuallyDisabledSync] = useState<boolean>(false);
   const [spotifyClientId, setSpotifyClientId] = useState<string>(() => localStorage.getItem('mb_spotify_client_id') || '');
   const [spotifyClientSecret, setSpotifyClientSecret] = useState<string>(() => localStorage.getItem('mb_spotify_client_secret') || '');
   const [spotifyPlaylistUrl, setSpotifyPlaylistUrl] = useState<string>('');
@@ -861,6 +862,7 @@ const AdminDashboard: React.FC = () => {
       setShowFireworks(false);
       lastCalledRef.current = null;
       setSpotifySyncEnabled(false);
+      setUserManuallyDisabledSync(false);
       if (winTimeoutRef.current) {
         clearTimeout(winTimeoutRef.current);
         winTimeoutRef.current = null;
@@ -1111,11 +1113,19 @@ const AdminDashboard: React.FC = () => {
     playTrackRef.current = playTrack;
   }, [playlist, audioFiles, calledNumbers, isCallingPaused, currentPlayingId, isPlaying, activeImportTab]);
 
+  useEffect(() => {
+    if (game && game.status === 'STARTED' && spotifyConnected && activeImportTab === 'SPOTIFY' && !spotifySyncEnabled && !userManuallyDisabledSync) {
+      socket.emit('START_SPOTIFY_SYNC', { gameId: game.id });
+    }
+  }, [game?.status, spotifyConnected, activeImportTab, spotifySyncEnabled, game?.id, userManuallyDisabledSync]);
+
   const toggleSpotifySync = () => {
     if (!game) return;
     if (spotifySyncEnabled) {
+      setUserManuallyDisabledSync(true);
       socket.emit('STOP_SPOTIFY_SYNC', { gameId: game.id });
     } else {
+      setUserManuallyDisabledSync(false);
       socket.emit('START_SPOTIFY_SYNC', { gameId: game.id });
     }
   };
