@@ -992,6 +992,8 @@ const AdminDashboard: React.FC = () => {
         const playlistItem = playlist[id - 1];
         const uri = typeof playlistItem === 'object' && playlistItem !== null ? (playlistItem as any).uri : '';
         if (uri) {
+          const trackId = uri.split(':').pop();
+          window.open(`https://open.spotify.com/track/${trackId}`, '_blank');
           socket.emit('ADMIN_CALL_NUMBER', { gameId: game?.id, number: id });
         } else {
           window.open(`https://open.spotify.com/search/${encodeURIComponent(typeof playlistItem === 'object' && playlistItem !== null ? (playlistItem as any).name : playlistItem)}`, '_blank');
@@ -1072,10 +1074,10 @@ const AdminDashboard: React.FC = () => {
   }, [playlist, audioFiles, calledNumbers, isCallingPaused, currentPlayingId, isPlaying, activeImportTab]);
 
   useEffect(() => {
-    if (game && game.status === 'STARTED' && spotifyConnected && activeImportTab === 'SPOTIFY' && !spotifySyncEnabled && !userManuallyDisabledSync) {
+    if (game && game.status === 'STARTED' && spotifyConnected && !spotifySyncEnabled && !userManuallyDisabledSync) {
       socket.emit('START_SPOTIFY_SYNC', { gameId: game.id });
     }
-  }, [game?.status, spotifyConnected, activeImportTab, spotifySyncEnabled, game?.id, userManuallyDisabledSync]);
+  }, [game?.status, spotifyConnected, spotifySyncEnabled, game?.id, userManuallyDisabledSync]);
 
   const toggleSpotifySync = () => {
     if (!game) return;
@@ -1485,14 +1487,23 @@ const AdminDashboard: React.FC = () => {
           {isPlaying ? '⏸️ Pause Music' : '▶️ Resume Music'}
         </button>
         <button 
-          className="exit-btn"
           style={{ 
-            zIndex: 10,
-            right: '25.5rem',
-            background: 'rgba(239, 68, 68, 0.1)', 
-            borderColor: 'rgba(239, 68, 68, 0.3)',
-            color: '#ef4444',
-            cursor: 'pointer'
+            position: 'absolute',
+            bottom: '4.5rem',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 10, 
+            background: '#ef4444', 
+            borderColor: '#ef4444',
+            color: 'white',
+            cursor: 'pointer',
+            padding: '0.75rem 1.5rem',
+            fontSize: '1.05rem',
+            borderRadius: '1rem',
+            fontWeight: 'bold',
+            border: '1px solid #ef4444',
+            boxShadow: '0 4px 20px rgba(239, 68, 68, 0.4)',
+            transition: 'all 0.2s'
           }} 
           onClick={async () => {
             if (window.confirm("Are you sure you want to reset all called numbers and start over?")) {
