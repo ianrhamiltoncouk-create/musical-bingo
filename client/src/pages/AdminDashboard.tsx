@@ -2152,7 +2152,7 @@ const AdminDashboard: React.FC = () => {
             <button onClick={startGame} style={{ width: '100%' }}>Start Game</button>
           )}
           
-          {(game.status === 'STARTED' || game.status === 'FINALE') && (
+          {(game.status === 'WAITING' || game.status === 'STARTED' || game.status === 'FINALE') && (
             <>
               {isCallingPaused && (
                 <div style={{
