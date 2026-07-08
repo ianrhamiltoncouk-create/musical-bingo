@@ -813,6 +813,8 @@ app.get('/api/spotify/playlists', async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
 // Spotify debug status
 const lastSpotifySyncStatus = {
   lastChecked: null,
