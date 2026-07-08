@@ -529,9 +529,27 @@ const AdminDashboard: React.FC = () => {
     }
   };
 
-  const deleteLocalTrack = (id: number) => {
+  const deleteLocalTrack = async (id: number) => {
     const updated = audioFiles.filter(t => t.id !== id);
-    setAudioFiles(updated);
+    const reindexed = updated.map((t, idx) => ({
+      ...t,
+      id: idx + 1
+    }));
+    setAudioFiles(reindexed);
+
+    const songNames = reindexed.map(t => t.name);
+    setPlaylist(songNames);
+    setPlaylistInput(songNames.join('\n'));
+
+    const savedId = game?.id || sessionStorage.getItem('bingo_host_game_id');
+    if (savedId) {
+      await saveRedirectSettings(redirectUrlInput, redirectDelay, autoRedirectEnabled, brandPromoImage, promoImageDelay, songNames);
+    }
+
+    const formattedName = `List - ${new Date().toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} at ${new Date().toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}`;
+    await savePlaylistToIDB(formattedName, reindexed);
+    const idbPlaylists = await getPlaylistsFromIDB();
+    setSavedPlaylists(idbPlaylists);
   };
 
   const verifyLicense = useCallback(async (key: string) => {
@@ -596,7 +614,7 @@ const AdminDashboard: React.FC = () => {
           setJoinedCount(data.joinedPlayersCount);
         }
       } else if (res.status === 404) {
-        sessionStorage.removeItem('bingo_host_game_id');
+        localStorage.removeItem('bingo_host_game_id');
         setGame(null);
       }
     } catch (error) {
@@ -634,7 +652,7 @@ const AdminDashboard: React.FC = () => {
       });
       if (res.ok) {
         const data = await res.json();
-        sessionStorage.setItem('bingo_host_game_id', data.id);
+        localStorage.setItem('bingo_host_game_id', data.id);
         setGame(data);
         await refreshBranding();
       } else {
@@ -678,7 +696,7 @@ const AdminDashboard: React.FC = () => {
     setIsPlaying(false);
 
     // 2. Pause Spotify playback
-    const savedId = game?.id || sessionStorage.getItem('bingo_host_game_id');
+    const savedId = game?.id || localStorage.getItem('bingo_host_game_id');
     if (savedId && spotifyConnected) {
       try {
         await fetch(`${API_BASE}/api/spotify/pause`, {
@@ -702,7 +720,7 @@ const AdminDashboard: React.FC = () => {
     }
 
     // 2. Resume Spotify playback
-    const savedId = game?.id || sessionStorage.getItem('bingo_host_game_id');
+    const savedId = game?.id || localStorage.getItem('bingo_host_game_id');
     if (savedId && spotifyConnected) {
       try {
         await fetch(`${API_BASE}/api/spotify/resume`, {
@@ -734,7 +752,7 @@ const AdminDashboard: React.FC = () => {
     setCurrentPlayingId(null);
 
     // 2. Stop/pause Spotify playback
-    const savedId = game?.id || sessionStorage.getItem('bingo_host_game_id');
+    const savedId = game?.id || localStorage.getItem('bingo_host_game_id');
     if (savedId && spotifyConnected) {
       try {
         await fetch(`${API_BASE}/api/spotify/pause`, {
@@ -750,7 +768,7 @@ const AdminDashboard: React.FC = () => {
 
   const closeRoom = () => {
     stopMusic();
-    sessionStorage.removeItem('bingo_host_game_id');
+    localStorage.removeItem('bingo_host_game_id');
     setGame(null);
     setCalledNumbers([]);
     setWinners([]);
@@ -758,7 +776,7 @@ const AdminDashboard: React.FC = () => {
   };
 
   useEffect(() => {
-    const savedId = sessionStorage.getItem('bingo_host_game_id');
+    const savedId = localStorage.getItem('bingo_host_game_id');
     if (savedId) {
       fetchGame(savedId);
     }
@@ -927,67 +945,7 @@ const AdminDashboard: React.FC = () => {
   };
 
   const playTuningSoundEffect = (): Promise<void> => {
-    return new Promise((resolve) => {
-      try {
-        const AudioCtxClass = window.AudioContext || (window as any).webkitAudioContext;
-        if (!AudioCtxClass) {
-          resolve();
-          return;
-        }
-        const ctx = new AudioCtxClass();
-        const bufferSize = ctx.sampleRate * 1.2;
-        const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
-        const data = buffer.getChannelData(0);
-        for (let i = 0; i < bufferSize; i++) {
-          data[i] = Math.random() * 2 - 1;
-        }
-
-        const noise = ctx.createBufferSource();
-        noise.buffer = buffer;
-
-        const filter = ctx.createBiquadFilter();
-        filter.type = 'bandpass';
-        filter.Q.value = 12;
-        filter.frequency.setValueAtTime(450, ctx.currentTime);
-        filter.frequency.exponentialRampToValueAtTime(2800, ctx.currentTime + 0.5);
-        filter.frequency.exponentialRampToValueAtTime(750, ctx.currentTime + 1.1);
-
-        const osc = ctx.createOscillator();
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(600, ctx.currentTime);
-        osc.frequency.linearRampToValueAtTime(1600, ctx.currentTime + 0.4);
-        osc.frequency.linearRampToValueAtTime(800, ctx.currentTime + 1.1);
-
-        const oscGain = ctx.createGain();
-        oscGain.gain.setValueAtTime(0.0, ctx.currentTime);
-        oscGain.gain.linearRampToValueAtTime(0.08, ctx.currentTime + 0.3);
-        oscGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1.1);
-
-        const mainGain = ctx.createGain();
-        mainGain.gain.setValueAtTime(0.12, ctx.currentTime);
-        mainGain.gain.linearRampToValueAtTime(0.12, ctx.currentTime + 0.7);
-        mainGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1.1);
-
-        noise.connect(filter);
-        osc.connect(oscGain);
-        filter.connect(mainGain);
-        oscGain.connect(mainGain);
-        mainGain.connect(ctx.destination);
-
-        noise.start();
-        osc.start();
-
-        setTimeout(async () => {
-          noise.stop();
-          osc.stop();
-          await ctx.close();
-          resolve();
-        }, 1100);
-      } catch (err) {
-        console.error('Audio synthesis failed:', err);
-        resolve();
-      }
-    });
+    return Promise.resolve();
   };
 
   const playTrack = async (id: number) => {
@@ -1087,7 +1045,7 @@ const AdminDashboard: React.FC = () => {
     audioRef.current.src = objectUrl;
     audioRef.current.volume = 0;
 
-    if (!calledNumbers.includes(id) && !isCallingPaused) {
+    if (!isCallingPaused) {
       socket.emit('ADMIN_CALL_NUMBER', { gameId: game?.id, number: id });
     }
 
@@ -1517,40 +1475,24 @@ const AdminDashboard: React.FC = () => {
           style={{ 
             zIndex: 10, 
             right: '13.5rem', 
-            background: currentPlayingId === null 
-              ? 'rgba(255,255,255,0.05)' 
-              : (isPlaying ? '#eab308' : '#1db954'), 
-            borderColor: currentPlayingId === null 
-              ? 'rgba(255,255,255,0.15)' 
-              : (isPlaying ? '#eab308' : '#1db954'),
-            color: currentPlayingId === null ? 'var(--text-muted)' : 'white',
-            cursor: currentPlayingId === null ? 'not-allowed' : 'pointer'
+            background: isPlaying ? '#eab308' : '#1db954', 
+            borderColor: isPlaying ? '#eab308' : '#1db954',
+            color: 'white',
+            cursor: 'pointer'
           }} 
-          disabled={currentPlayingId === null}
           onClick={togglePauseMusic}
         >
-          {currentPlayingId === null 
-            ? '⏸️ Pause Music' 
-            : (isPlaying ? '⏸️ Pause Music' : '▶️ Resume Music')}
+          {isPlaying ? '⏸️ Pause Music' : '▶️ Resume Music'}
         </button>
         <button 
+          className="exit-btn"
           style={{ 
-            position: 'absolute',
-            bottom: '2rem',
-            left: '50%',
-            transform: 'translateX(-50%)',
-            zIndex: 10, 
-            background: '#ef4444', 
-            borderColor: '#ef4444',
-            color: 'white',
-            cursor: 'pointer',
-            padding: '0.75rem 1.5rem',
-            fontSize: '1.05rem',
-            borderRadius: '1rem',
-            fontWeight: 'bold',
-            border: '1px solid #ef4444',
-            boxShadow: '0 4px 20px rgba(239, 68, 68, 0.4)',
-            transition: 'all 0.2s'
+            zIndex: 10,
+            right: '25.5rem',
+            background: 'rgba(239, 68, 68, 0.1)', 
+            borderColor: 'rgba(239, 68, 68, 0.3)',
+            color: '#ef4444',
+            cursor: 'pointer'
           }} 
           onClick={async () => {
             if (window.confirm("Are you sure you want to reset all called numbers and start over?")) {
@@ -2990,22 +2932,18 @@ const AdminDashboard: React.FC = () => {
                         </button>
                         <button 
                           onClick={togglePauseMusic} 
-                          disabled={currentPlayingId === null}
+                          disabled={game.status !== 'STARTED' && game.status !== 'FINALE'}
                           style={{ 
                             width: '100%', 
-                            background: currentPlayingId === null 
-                              ? 'rgba(255,255,255,0.05)' 
-                              : (isPlaying ? '#eab308' : '#1db954'), 
-                            color: currentPlayingId === null ? 'var(--text-muted)' : 'white',
+                            background: isPlaying ? '#eab308' : '#1db954', 
+                            color: 'white',
                             fontWeight: 'bold',
                             margin: 0,
                             boxShadow: 'none',
-                            cursor: currentPlayingId === null ? 'not-allowed' : 'pointer'
+                            cursor: 'pointer'
                           }}
                         >
-                          {currentPlayingId === null 
-                            ? '⏸️ Pause Music' 
-                            : (isPlaying ? '⏸️ Pause Music' : '▶️ Resume Music')}
+                          {isPlaying ? '⏸️ Pause Music' : '▶️ Resume Music'}
                         </button>
                       </div>
                     </>

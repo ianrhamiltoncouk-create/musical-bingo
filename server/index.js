@@ -827,7 +827,7 @@ app.post('/api/spotify/pause', async (req, res) => {
     }
 
     const triggerPause = async (token) => {
-      const response = await fetch('https://api.spotify.com/v1/me/player/pause', {
+      let response = await fetch('https://api.spotify.com/v1/me/player/pause', {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`
@@ -837,13 +837,18 @@ app.post('/api/spotify/pause', async (req, res) => {
       if (response.status === 401) {
         const freshToken = await refreshSpotifyToken(gameId);
         if (freshToken) {
-          await fetch('https://api.spotify.com/v1/me/player/pause', {
+          response = await fetch('https://api.spotify.com/v1/me/player/pause', {
             method: 'PUT',
             headers: {
               'Authorization': `Bearer ${freshToken}`
             }
           });
         }
+      }
+
+      if (!response.ok) {
+        const errText = await response.text();
+        console.error(`[Spotify API] Pause failed: ${response.status} - ${errText}`);
       }
     };
 
@@ -866,7 +871,7 @@ app.post('/api/spotify/resume', async (req, res) => {
     }
 
     const triggerResume = async (token) => {
-      const response = await fetch('https://api.spotify.com/v1/me/player/play', {
+      let response = await fetch('https://api.spotify.com/v1/me/player/play', {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`
@@ -876,13 +881,18 @@ app.post('/api/spotify/resume', async (req, res) => {
       if (response.status === 401) {
         const freshToken = await refreshSpotifyToken(gameId);
         if (freshToken) {
-          await fetch('https://api.spotify.com/v1/me/player/play', {
+          response = await fetch('https://api.spotify.com/v1/me/player/play', {
             method: 'PUT',
             headers: {
               'Authorization': `Bearer ${freshToken}`
             }
           });
         }
+      }
+
+      if (!response.ok) {
+        const errText = await response.text();
+        console.error(`[Spotify API] Resume failed: ${response.status} - ${errText}`);
       }
     };
 
@@ -1404,7 +1414,10 @@ async function callNumberHelper(gameId, number, io) {
       }
     }
 
-    await db.run('INSERT INTO called_numbers (game_id, number) VALUES (?, ?)', [gameId, number]);
+    const alreadyCalled = await db.get('SELECT 1 FROM called_numbers WHERE game_id = ? AND number = ?', [gameId, number]);
+    if (!alreadyCalled) {
+      await db.run('INSERT INTO called_numbers (game_id, number) VALUES (?, ?)', [gameId, number]);
+    }
     
     const called = await db.all('SELECT number FROM called_numbers WHERE game_id = ? ORDER BY called_at ASC', [gameId]);
     const numbers = called.map(c => c.number);
