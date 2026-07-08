@@ -84,6 +84,7 @@ const AdminDashboard: React.FC = () => {
   const [spotifyClientSecret, setSpotifyClientSecret] = useState<string>(() => localStorage.getItem('mb_spotify_client_secret') || '');
   const [spotifyPlaylistUrl, setSpotifyPlaylistUrl] = useState<string>('');
   const [spotifyConnected, setSpotifyConnected] = useState<boolean>(false);
+  const [spotifyTelemetry, setSpotifyTelemetry] = useState<any>(null);
   const [spotifyPlaylists, setSpotifyPlaylists] = useState<any[]>([]);
   const [spotifyPlaylistsError, setSpotifyPlaylistsError] = useState<string | null>(null);
   const [selectedGameType, setSelectedGameType] = useState<'MUSIC' | 'NUMERIC'>('MUSIC');
@@ -211,6 +212,27 @@ const AdminDashboard: React.FC = () => {
       setSpotifyPlaylists([]);
     }
   }, [spotifyConnected, fetchSpotifyPlaylists]);
+
+  useEffect(() => {
+    if (!game?.id || !spotifySyncEnabled) {
+      setSpotifyTelemetry(null);
+      return;
+    }
+
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/spotify/debug?gameId=${game.id}`);
+        if (res.ok) {
+          const data = await res.json();
+          setSpotifyTelemetry(data.pollerState);
+        }
+      } catch (e) {
+        console.error('Failed to fetch Spotify telemetry:', e);
+      }
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [game?.id, spotifySyncEnabled]);
 
   // Generate local QR code offline
   useEffect(() => {
@@ -693,29 +715,48 @@ const AdminDashboard: React.FC = () => {
       await fadeAudio(audioRef.current, audioRef.current.volume, 0, 800);
       audioRef.current.pause();
     }
-    setIsPlaying(false);
+    
+    let localPaused = true;
 
     // 2. Pause Spotify playback
     const savedId = game?.id || localStorage.getItem('bingo_host_game_id');
     if (savedId && spotifyConnected) {
       try {
-        await fetch(`${API_BASE}/api/spotify/pause`, {
+        const res = await fetch(`${API_BASE}/api/spotify/pause`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ gameId: savedId })
         });
+        if (!res.ok) {
+          const data = await res.json();
+          localPaused = false;
+          if (data.error === 'PREMIUM_REQUIRED') {
+            alert('⚠️ Spotify Premium is required to control playback automatically. Please pause the song manually in your Spotify app.');
+          } else if (data.error === 'NO_ACTIVE_DEVICE') {
+            alert('⚠️ No active Spotify device found. Please play a song in your Spotify app first.');
+          } else {
+            alert(`⚠️ Spotify pause failed: ${data.error}`);
+          }
+        }
       } catch (err) {
         console.error('Failed to pause Spotify playback:', err);
+        localPaused = false;
       }
+    }
+
+    if (localPaused) {
+      setIsPlaying(false);
     }
   };
 
   const resumeMusic = async () => {
+    let localResumed = false;
+
     // 1. Resume local audio
     if (audioRef.current && currentPlayingId !== null && audioFiles.length > 0) {
       audioRef.current.volume = 0;
       audioRef.current.play().catch(e => console.error('Failed to resume local audio:', e));
-      setIsPlaying(true);
+      localResumed = true;
       await fadeAudio(audioRef.current, 0, 1, 800);
     }
 
@@ -723,15 +764,30 @@ const AdminDashboard: React.FC = () => {
     const savedId = game?.id || localStorage.getItem('bingo_host_game_id');
     if (savedId && spotifyConnected) {
       try {
-        await fetch(`${API_BASE}/api/spotify/resume`, {
+        const res = await fetch(`${API_BASE}/api/spotify/resume`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ gameId: savedId })
         });
-        setIsPlaying(true);
+        if (res.ok) {
+          localResumed = true;
+        } else {
+          const data = await res.json();
+          if (data.error === 'PREMIUM_REQUIRED') {
+            alert('⚠️ Spotify Premium is required to control playback automatically. Please resume the song manually in your Spotify app.');
+          } else if (data.error === 'NO_ACTIVE_DEVICE') {
+            alert('⚠️ No active Spotify device found. Please play a song in your Spotify app first.');
+          } else {
+            alert(`⚠️ Spotify resume failed: ${data.error}`);
+          }
+        }
       } catch (err) {
         console.error('Failed to resume Spotify playback:', err);
       }
+    }
+
+    if (localResumed) {
+      setIsPlaying(true);
     }
   };
 
@@ -2480,6 +2536,58 @@ const AdminDashboard: React.FC = () => {
                                 title={game?.status !== 'STARTED' ? 'Start the game first to enable Spotify Sync' : 'Toggle Spotify Sync'}
                               />
                             </div>
+
+                            {spotifyTelemetry && (
+                              <div style={{ 
+                                marginTop: '0.5rem', 
+                                background: 'rgba(0,0,0,0.2)', 
+                                border: '1px solid rgba(255,255,255,0.05)', 
+                                borderRadius: '0.5rem', 
+                                padding: '0.6rem 0.75rem', 
+                                textAlign: 'left', 
+                                fontSize: '0.72rem',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '0.25rem'
+                              }}>
+                                <div style={{ fontWeight: 'bold', color: '#1db954', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <span>📡 Spotify Sync Monitor</span>
+                                  <span style={{ 
+                                    padding: '0.1rem 0.35rem', 
+                                    borderRadius: '0.25rem', 
+                                    fontSize: '0.6rem', 
+                                    background: spotifyTelemetry.pollerActive ? 'rgba(34, 197, 94, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                                    color: spotifyTelemetry.pollerActive ? '#22c55e' : '#ef4444'
+                                  }}>
+                                    {spotifyTelemetry.pollerActive ? 'Polling Active' : 'Stopped'}
+                                  </span>
+                                </div>
+                                <div style={{ color: 'var(--text)' }}>
+                                  <div style={{ display: 'flex', gap: '0.25rem', marginBottom: '0.15rem' }}>
+                                    <span style={{ color: 'var(--text-muted)' }}>Detected:</span>
+                                    <span style={{ fontWeight: 'bold', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={spotifyTelemetry.detectedTitle || 'None'}>
+                                      {spotifyTelemetry.detectedTitle || 'None'}
+                                    </span>
+                                  </div>
+                                  <div style={{ display: 'flex', gap: '0.25rem', marginBottom: '0.15rem' }}>
+                                    <span style={{ color: 'var(--text-muted)' }}>Match Result:</span>
+                                    <span style={{ color: spotifyTelemetry.matchResult?.includes('Matched') ? '#22c55e' : 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={spotifyTelemetry.matchResult || 'Pending'}>
+                                      {spotifyTelemetry.matchResult || 'Pending'}
+                                    </span>
+                                  </div>
+                                  {spotifyTelemetry.error && (
+                                    <div style={{ 
+                                      color: '#ef4444', 
+                                      marginTop: '0.25rem', 
+                                      paddingTop: '0.25rem', 
+                                      borderTop: '1px dashed rgba(239, 68, 68, 0.15)' 
+                                    }}>
+                                      ⚠️ {spotifyTelemetry.error}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            )}
                           </>
                         ) : (
                           <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textAlign: 'center', padding: '0.5rem' }}>

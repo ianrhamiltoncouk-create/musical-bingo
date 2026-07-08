@@ -813,6 +813,36 @@ app.get('/api/spotify/playlists', async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+// Spotify debug status
+const lastSpotifySyncStatus = {
+  lastChecked: null,
+  detectedTitle: null,
+  matchResult: null,
+  error: null,
+  pollerActive: false
+};
+
+app.get('/api/spotify/debug', async (req, res) => {
+  const { gameId } = req.query;
+  if (!gameId) return res.status(400).json({ error: 'gameId required' });
+  try {
+    const db = getDb();
+    const game = await db.get('SELECT * FROM games WHERE id = ?', [gameId]);
+    if (!game) return res.status(404).json({ error: 'Game not found' });
+    
+    res.json({
+      success: true,
+      hasAccessToken: !!game.spotify_access_token,
+      hasRefreshToken: !!game.spotify_refresh_token,
+      spotifyClientId: game.spotify_client_id ? 'Configured (Custom)' : 'Default Env ID',
+      gameType: game.game_type,
+      gameStatus: game.status,
+      playlistTracksCount: JSON.parse(game.playlist || '[]').length,
+      pollerState: lastSpotifySyncStatus
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Spotify Pause Playback
@@ -849,6 +879,7 @@ app.post('/api/spotify/pause', async (req, res) => {
       if (!response.ok) {
         const errText = await response.text();
         console.error(`[Spotify API] Pause failed: ${response.status} - ${errText}`);
+        throw new Error(response.status === 403 ? 'PREMIUM_REQUIRED' : (response.status === 404 ? 'NO_ACTIVE_DEVICE' : errText));
       }
     };
 
@@ -893,6 +924,7 @@ app.post('/api/spotify/resume', async (req, res) => {
       if (!response.ok) {
         const errText = await response.text();
         console.error(`[Spotify API] Resume failed: ${response.status} - ${errText}`);
+        throw new Error(response.status === 403 ? 'PREMIUM_REQUIRED' : (response.status === 404 ? 'NO_ACTIVE_DEVICE' : errText));
       }
     };
 
@@ -1007,6 +1039,7 @@ function startSpotifySync(gameId, io) {
 
   console.log(`[Spotify Sync] Starting sync process for game: ${gameId}`);
   let lastTitle = '';
+  lastSpotifySyncStatus.pollerActive = true;
 
   const intervalId = setInterval(async () => {
     try {
@@ -1017,8 +1050,13 @@ function startSpotifySync(gameId, io) {
         clearInterval(intervalId);
         spotifyPollers.delete(gameId);
         io.to(gameId).emit('SPOTIFY_SYNC_STATUS', { enabled: false });
+        lastSpotifySyncStatus.pollerActive = false;
         return;
       }
+
+      lastSpotifySyncStatus.lastChecked = new Date().toISOString();
+      lastSpotifySyncStatus.pollerActive = true;
+      lastSpotifySyncStatus.error = null;
 
       let title = '';
       let matched = false;
@@ -1029,6 +1067,7 @@ function startSpotifySync(gameId, io) {
 
         const forbiddenTitles = ['spotify', 'spotify free', 'spotify premium', 'advertisement'];
         if (forbiddenTitles.includes(detectedTitle.toLowerCase()) || detectedTitle.toLowerCase().startsWith('spotify ')) {
+          lastSpotifySyncStatus.matchResult = `Skipped forbidden/ad title: "${detectedTitle}"`;
           return;
         }
 
@@ -1050,6 +1089,8 @@ function startSpotifySync(gameId, io) {
           const songId = matchedIndex + 1;
           const alreadyCalled = await db.get('SELECT 1 FROM called_numbers WHERE game_id = ? AND number = ?', [gameId, songId]);
           
+          lastSpotifySyncStatus.matchResult = `Matched: "${playlist[matchedIndex]?.name || playlist[matchedIndex]}" (ID: ${songId}). Already called: ${!!alreadyCalled}`;
+
           if (!alreadyCalled) {
             const displaySong = typeof playlist[matchedIndex] === 'object' && playlist[matchedIndex] !== null ? playlist[matchedIndex].name : playlist[matchedIndex];
             console.log(`[Spotify Sync] Auto-calling matched song: "${displaySong}" (ID: ${songId})`);
@@ -1108,6 +1149,8 @@ function startSpotifySync(gameId, io) {
               });
             }
           }
+        } else {
+          lastSpotifySyncStatus.matchResult = `No match in playlist for detected song: "${detectedTitle}"`;
         }
       };
 
@@ -1122,20 +1165,35 @@ function startSpotifySync(gameId, io) {
               response = await fetch('https://api.spotify.com/v1/me/player/currently-playing', {
                 headers: { 'Authorization': `Bearer ${newToken}` }
               });
+            } else {
+              lastSpotifySyncStatus.error = 'Failed to refresh expired Spotify access token.';
             }
           }
-          if (response.ok && response.status !== 204) {
-            const data = await response.json();
-            if (data && data.item && data.item.name) {
-              const songName = data.item.name;
-              const artists = data.item.artists ? data.item.artists.map(a => a.name).join(', ') : '';
-              title = `${songName} - ${artists}`;
-              matched = true;
-              await processTitle(title);
+          if (response.ok) {
+            if (response.status === 204) {
+              lastSpotifySyncStatus.detectedTitle = 'Nothing playing (Inactive)';
+              lastSpotifySyncStatus.matchResult = 'No active track detected on Spotify player.';
+            } else {
+              const data = await response.json();
+              if (data && data.item && data.item.name) {
+                const songName = data.item.name;
+                const artists = data.item.artists ? data.item.artists.map(a => a.name).join(', ') : '';
+                title = `${songName} - ${artists}`;
+                matched = true;
+                lastSpotifySyncStatus.detectedTitle = title;
+                await processTitle(title);
+              } else {
+                lastSpotifySyncStatus.detectedTitle = 'Unknown Track';
+                lastSpotifySyncStatus.matchResult = 'Spotify API returned null item/metadata.';
+              }
             }
+          } else {
+            const errText = await response.text();
+            lastSpotifySyncStatus.error = `Currently playing fetch failed: ${response.status} - ${errText}`;
           }
         } catch (apiErr) {
           console.error('[Spotify Sync API] Error fetching current track:', apiErr);
+          lastSpotifySyncStatus.error = `API Error: ${apiErr.message}`;
         }
       }
 
