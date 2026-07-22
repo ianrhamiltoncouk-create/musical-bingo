@@ -27,7 +27,7 @@ const BingoCard: React.FC<BingoCardProps> = ({ card, markedNumbers, userMarked, 
           
           const item = typeof cell === 'number' && playlist && playlist.length > 0 ? playlist[cell - 1] : null;
           const songTitle = item 
-            ? (typeof item === 'object' && item !== null ? (item as any).name : item) 
+            ? (typeof item === 'object' && item !== null ? (`${(item as any).name || (item as any).title || ''}${(item as any).artist ? ' - ' + (item as any).artist : ''}`) : item) 
             : cell;
 
           const is4x4 = displayCard.length === 4;

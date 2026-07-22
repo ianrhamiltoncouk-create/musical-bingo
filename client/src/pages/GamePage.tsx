@@ -360,7 +360,7 @@ const GamePage: React.FC = () => {
             const songName = gameType === 'NUMERIC'
               ? `Number ${num}`
               : (playlist[num - 1] 
-                  ? (typeof playlist[num - 1] === 'object' && playlist[num - 1] !== null ? (playlist[num - 1] as any).name : playlist[num - 1])
+                  ? (typeof playlist[num - 1] === 'object' && playlist[num - 1] !== null ? (`${(playlist[num - 1] as any).name || (playlist[num - 1] as any).title || ''}${(playlist[num - 1] as any).artist ? ' - ' + (playlist[num - 1] as any).artist : ''}`) : playlist[num - 1])
                   : `Song #${num}`);
             const isLast = num === lastCalled;
             return (

@@ -12,6 +12,63 @@ const API_BASE = window.location.port === '5173'
   ? `http://${window.location.hostname}:3001`
   : `${window.location.protocol}//${window.location.host}`;
 
+export const formatTrackName = (item: any): string => {
+  if (!item) return '';
+  if (typeof item === 'string') return item;
+  if (typeof item === 'object' && item !== null) {
+    const name = item.name || item.title || item.song || '';
+    const artist = item.artist || item.singer || item.author || '';
+    if (name && artist) {
+      return `${name} - ${artist}`;
+    }
+    return name || artist || '';
+  }
+  return String(item);
+};
+
+export const getSpotifyEmbedUrl = (urlOrUri: string) => {
+  if (!urlOrUri) return null;
+  const playlistMatch = urlOrUri.match(/playlist[\/:]([a-zA-Z0-9]+)/);
+  if (playlistMatch && playlistMatch[1]) {
+    return `https://open.spotify.com/embed/playlist/${playlistMatch[1]}?utm_source=generator&theme=0`;
+  }
+  const trackMatch = urlOrUri.match(/track[\/:]([a-zA-Z0-9]+)/);
+  if (trackMatch && trackMatch[1]) {
+    return `https://open.spotify.com/embed/track/${trackMatch[1]}?utm_source=generator&theme=0`;
+  }
+  const albumMatch = urlOrUri.match(/album[\/:]([a-zA-Z0-9]+)/);
+  if (albumMatch && albumMatch[1]) {
+    return `https://open.spotify.com/embed/album/${albumMatch[1]}?utm_source=generator&theme=0`;
+  }
+  return null;
+};
+
+export const getYouTubeEmbedUrl = (url: string) => {
+  if (!url) return null;
+  const listMatch = url.match(/[?&]list=([a-zA-Z0-9_-]+)/);
+  if (listMatch && listMatch[1]) {
+    return `https://www.youtube.com/embed/videoseries?list=${listMatch[1]}`;
+  }
+  const videoMatch = url.match(/(?:v=|\/embed\/|\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+  if (videoMatch && videoMatch[1]) {
+    return `https://www.youtube.com/embed/${videoMatch[1]}`;
+  }
+  return null;
+};
+
+export const getAmazonEmbedUrl = (url: string) => {
+  if (!url) return null;
+  const playlistMatch = url.match(/playlists\/([a-zA-Z0-9_-]+)/);
+  if (playlistMatch && playlistMatch[1]) {
+    return `https://music.amazon.com/embed/${playlistMatch[1]}`;
+  }
+  const albumMatch = url.match(/albums\/([a-zA-Z0-9_-]+)/);
+  if (albumMatch && albumMatch[1]) {
+    return `https://music.amazon.com/embed/${albumMatch[1]}`;
+  }
+  return null;
+};
+
 interface Game {
   id: string;
   status: 'WAITING' | 'STARTED' | 'FINALE' | 'FINISHED';
@@ -91,7 +148,10 @@ const AdminDashboard: React.FC = () => {
   const [spotifyConfigured, setSpotifyConfigured] = useState<boolean>(false);
   const [selectedGameMode, setSelectedGameMode] = useState<'SINGLE_WINNER' | 'PARTY_CLIMAX'>('SINGLE_WINNER');
   const [showAdvancedSpotify, setShowAdvancedSpotify] = useState<boolean>(false);
-  const [activeImportTab, setActiveImportTab] = useState<'SPOTIFY' | 'LOCAL_FILES' | 'TEXT_LIST'>('SPOTIFY');
+  type ActiveSourceTab = 'SPOTIFY' | 'LOCAL_FILES' | 'YOUTUBE' | 'AMAZON' | 'TEXT_LIST';
+  const [activeImportTab, setActiveImportTab] = useState<ActiveSourceTab>('SPOTIFY');
+  const [youtubeUrl, setYoutubeUrl] = useState<string>(() => localStorage.getItem('mb_youtube_url') || '');
+  const [amazonUrl, setAmazonUrl] = useState<string>(() => localStorage.getItem('mb_amazon_url') || '');
   const [activePromoTab, setActivePromoTab] = useState<'REDIRECT' | 'FLYER'>('REDIRECT');
   const [showQrModal, setShowQrModal] = useState<boolean>(false);
   const [targetLine, setTargetLine] = useState<boolean>(true);
@@ -1046,14 +1106,37 @@ const AdminDashboard: React.FC = () => {
         socket.emit('TUNING_FINISHED', { gameId: game?.id });
 
         const playlistItem = playlist[id - 1];
-        const uri = typeof playlistItem === 'object' && playlistItem !== null ? (playlistItem as any).uri : '';
-        if (uri) {
-          const trackId = uri.split(':').pop();
-          window.open(`https://open.spotify.com/track/${trackId}`, '_blank');
+        const trackObj = typeof playlistItem === 'object' && playlistItem !== null ? playlistItem : { name: String(playlistItem) };
+        const trackName = formatTrackName(playlistItem);
+        const uri = (trackObj as any).uri || '';
+        const url = (trackObj as any).url || '';
+
+        if (activeImportTab === 'YOUTUBE') {
+          if (url && url.includes('youtube')) {
+            window.open(url, '_blank');
+          } else {
+            window.open(`https://www.youtube.com/results?search_query=${encodeURIComponent(trackName)}`, '_blank');
+          }
+          socket.emit('ADMIN_CALL_NUMBER', { gameId: game?.id, number: id });
+        } else if (activeImportTab === 'AMAZON') {
+          if (url && url.includes('amazon')) {
+            window.open(url, '_blank');
+          } else {
+            window.open(`https://music.amazon.com/search/${encodeURIComponent(trackName)}`, '_blank');
+          }
           socket.emit('ADMIN_CALL_NUMBER', { gameId: game?.id, number: id });
         } else {
-          window.open(`https://open.spotify.com/search/${encodeURIComponent(typeof playlistItem === 'object' && playlistItem !== null ? (playlistItem as any).name : playlistItem)}`, '_blank');
-          socket.emit('ADMIN_CALL_NUMBER', { gameId: game?.id, number: id });
+          if (uri) {
+            const trackId = uri.split(':').pop();
+            window.open(`https://open.spotify.com/track/${trackId}`, '_blank');
+            socket.emit('ADMIN_CALL_NUMBER', { gameId: game?.id, number: id });
+          } else if (url && url.includes('spotify')) {
+            window.open(url, '_blank');
+            socket.emit('ADMIN_CALL_NUMBER', { gameId: game?.id, number: id });
+          } else {
+            window.open(`https://open.spotify.com/search/${encodeURIComponent(trackName)}`, '_blank');
+            socket.emit('ADMIN_CALL_NUMBER', { gameId: game?.id, number: id });
+          }
         }
       }
       return;
@@ -1662,20 +1745,102 @@ const AdminDashboard: React.FC = () => {
               >
                 <span className="card-inner">
                   <span className="card-label">
-                    {isTuning ? 'Scanning Dial...' : (game.game_type === 'MUSIC' ? 'Now Playing' : 'Called Number')}
+                    {isTuning ? '📻 Tuning Frequencies...' : (game.game_type === 'MUSIC' ? 'Now Playing' : 'Called Number')}
                   </span>
-                  <span className="card-value">
-                    {isTuning 
-                      ? '📻 Tuning Frequencies...' 
-                      : (lastCalled 
-                          ? (game.game_type === 'NUMERIC' 
-                              ? lastCalled 
-                              : (typeof playlist[lastCalled - 1] === 'object' && playlist[lastCalled - 1] !== null ? (playlist[lastCalled - 1] as any).name : playlist[lastCalled - 1])) 
-                          : 'Waiting...')}
-                  </span>
+                  {(() => {
+                    if (isTuning) {
+                      return <span className="card-value">📻 Tuning Frequencies...</span>;
+                    }
+                    if (!lastCalled) {
+                      return <span className="card-value">Waiting...</span>;
+                    }
+                    if (game.game_type === 'NUMERIC') {
+                      return <span className="card-value">{lastCalled}</span>;
+                    }
+
+                    const trackObj = playlist[lastCalled - 1];
+                    const formatted = formatTrackName(trackObj);
+                    
+                    let title = formatted;
+                    let artist = '';
+                    if (typeof trackObj === 'object' && trackObj !== null) {
+                      title = (trackObj as any).name || (trackObj as any).title || formatted;
+                      artist = (trackObj as any).artist || (trackObj as any).singer || '';
+                    } else if (formatted.includes(' - ')) {
+                      const parts = formatted.split(' - ');
+                      title = parts[0];
+                      artist = parts.slice(1).join(' - ');
+                    }
+
+                    const platformTag = activeImportTab === 'SPOTIFY' 
+                      ? '🎵 Spotify' 
+                      : activeImportTab === 'YOUTUBE' 
+                      ? '▶️ YouTube' 
+                      : activeImportTab === 'AMAZON' 
+                      ? '📦 Amazon Music' 
+                      : activeImportTab === 'LOCAL_FILES' 
+                      ? '📂 Local Track' 
+                      : '';
+
+                    return (
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.35rem', width: '100%' }}>
+                        <div style={{ fontSize: '0.8rem', color: 'var(--accent)', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '1px' }}>
+                          Track #{lastCalled} {platformTag && `• ${platformTag}`}
+                        </div>
+                        <div style={{ fontSize: '2rem', fontWeight: 900, color: '#1e1b4b', textAlign: 'center', lineHeight: 1.2, wordBreak: 'break-word' }}>
+                          {title || `Song #${lastCalled}`}
+                        </div>
+                        {artist && (
+                          <div style={{ fontSize: '1.25rem', fontWeight: 700, color: '#475569', textAlign: 'center' }}>
+                            🎤 {artist}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </span>
               </div>
             </div>
+
+            {/* Embedded Active Streaming Web Player in Presenter Mode */}
+            {activeImportTab === 'SPOTIFY' && getSpotifyEmbedUrl(spotifyPlaylistUrl) && (
+              <div style={{ width: '100%', maxWidth: '650px', margin: '1rem auto 0 auto', borderRadius: '1rem', overflow: 'hidden', border: '1px solid rgba(29,185,84,0.4)', boxShadow: '0 8px 32px rgba(0,0,0,0.6)' }}>
+                <iframe 
+                  src={getSpotifyEmbedUrl(spotifyPlaylistUrl)!}
+                  width="100%" 
+                  height="152" 
+                  title="Presenter Spotify Web Player"
+                  frameBorder="0" 
+                  allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" 
+                  loading="lazy"
+                />
+              </div>
+            )}
+            {activeImportTab === 'YOUTUBE' && getYouTubeEmbedUrl(youtubeUrl) && (
+              <div style={{ width: '100%', maxWidth: '650px', margin: '1rem auto 0 auto', borderRadius: '1rem', overflow: 'hidden', border: '1px solid rgba(255,0,0,0.4)', boxShadow: '0 8px 32px rgba(0,0,0,0.6)' }}>
+                <iframe 
+                  src={getYouTubeEmbedUrl(youtubeUrl)!}
+                  width="100%" 
+                  height="180" 
+                  title="Presenter YouTube Web Player"
+                  frameBorder="0" 
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                  allowFullScreen
+                />
+              </div>
+            )}
+            {activeImportTab === 'AMAZON' && getAmazonEmbedUrl(amazonUrl) && (
+              <div style={{ width: '100%', maxWidth: '650px', margin: '1rem auto 0 auto', borderRadius: '1rem', overflow: 'hidden', border: '1px solid rgba(255,153,0,0.4)', boxShadow: '0 8px 32px rgba(0,0,0,0.6)' }}>
+                <iframe 
+                  src={getAmazonEmbedUrl(amazonUrl)!}
+                  width="100%" 
+                  height="180" 
+                  title="Presenter Amazon Music Web Player"
+                  frameBorder="0" 
+                  allow="autoplay; encrypted-media" 
+                />
+              </div>
+            )}
             
             <div className="presenter-hint">
               {isCallingPaused ? (
@@ -2319,52 +2484,41 @@ const AdminDashboard: React.FC = () => {
                     marginBottom: '1.25rem',
                     textAlign: 'left'
                   }}>
-                    <div style={{ display: 'flex', gap: '0.25rem', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '0.5rem', marginBottom: '1rem' }}>
-                      <button
-                        onClick={() => setActiveImportTab('SPOTIFY')}
+                    <div style={{ marginBottom: '1.25rem' }}>
+                      <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 'bold', color: 'var(--text)', marginBottom: '0.5rem', textAlign: 'left' }}>
+                        🎛️ Select Active Music / Track Source:
+                      </label>
+                      <select
+                        value={activeImportTab}
+                        onChange={(e) => setActiveImportTab(e.target.value as ActiveSourceTab)}
                         style={{
-                          flex: 1,
-                          fontSize: '0.75rem',
-                          padding: '0.45rem',
-                          background: activeImportTab === 'SPOTIFY' ? '#1db954' : 'rgba(255,255,255,0.05)',
+                          width: '100%',
+                          padding: '0.75rem 1rem',
+                          borderRadius: '0.75rem',
+                          background: activeImportTab === 'SPOTIFY' 
+                            ? '#1db954' 
+                            : activeImportTab === 'LOCAL_FILES' 
+                            ? 'var(--secondary)' 
+                            : activeImportTab === 'YOUTUBE'
+                            ? '#ff0000'
+                            : activeImportTab === 'AMAZON'
+                            ? '#ff9900'
+                            : 'var(--accent)',
                           color: 'white',
                           border: 'none',
-                          boxShadow: 'none',
-                          margin: 0
+                          fontSize: '0.95rem',
+                          fontWeight: 'bold',
+                          cursor: 'pointer',
+                          boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
+                          outline: 'none'
                         }}
                       >
-                        🎵 Spotify Import
-                      </button>
-                      <button
-                        onClick={() => setActiveImportTab('LOCAL_FILES')}
-                        style={{
-                          flex: 1,
-                          fontSize: '0.75rem',
-                          padding: '0.45rem',
-                          background: activeImportTab === 'LOCAL_FILES' ? 'var(--secondary)' : 'rgba(255,255,255,0.05)',
-                          color: 'white',
-                          border: 'none',
-                          boxShadow: 'none',
-                          margin: 0
-                        }}
-                      >
-                        📂 Local Files
-                      </button>
-                      <button
-                        onClick={() => setActiveImportTab('TEXT_LIST')}
-                        style={{
-                          flex: 1,
-                          fontSize: '0.75rem',
-                          padding: '0.45rem',
-                          background: activeImportTab === 'TEXT_LIST' ? 'var(--accent)' : 'rgba(255,255,255,0.05)',
-                          color: 'white',
-                          border: 'none',
-                          boxShadow: 'none',
-                          margin: 0
-                        }}
-                      >
-                        ✍️ Text List
-                      </button>
+                        <option value="SPOTIFY" style={{ background: '#1e1b4b', color: 'white' }}>🎵 Spotify</option>
+                        <option value="LOCAL_FILES" style={{ background: '#1e1b4b', color: 'white' }}>📂 Local Tracks</option>
+                        <option value="YOUTUBE" style={{ background: '#1e1b4b', color: 'white' }}>▶️ YouTube</option>
+                        <option value="AMAZON" style={{ background: '#1e1b4b', color: 'white' }}>📦 Amazon Music</option>
+                        <option value="TEXT_LIST" style={{ background: '#1e1b4b', color: 'white' }}>✍️ Text List</option>
+                      </select>
                     </div>
 
                     {/* Spotify Tab content */}
@@ -2594,6 +2748,163 @@ const AdminDashboard: React.FC = () => {
                             Please connect your Spotify account using the button above to import playlists.
                           </div>
                         )}
+
+                        {/* Spotify Embed Player Widget */}
+                        {getSpotifyEmbedUrl(spotifyPlaylistUrl) && (
+                          <div style={{ marginTop: '0.75rem', borderRadius: '0.75rem', overflow: 'hidden', border: '1px solid rgba(29, 185, 84, 0.3)', boxShadow: '0 8px 24px rgba(0,0,0,0.4)' }}>
+                            <iframe 
+                              src={getSpotifyEmbedUrl(spotifyPlaylistUrl)!}
+                              width="100%" 
+                              height="350" 
+                              title="Spotify Web Player Widget"
+                              frameBorder="0" 
+                              allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" 
+                              loading="lazy"
+                              style={{ display: 'block', width: '100%' }}
+                            />
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* YouTube Tab content */}
+                    {activeImportTab === 'YOUTUBE' && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                        <div style={{
+                          background: 'rgba(255, 0, 0, 0.05)',
+                          border: '1px solid rgba(255, 0, 0, 0.2)',
+                          padding: '0.75rem',
+                          borderRadius: '0.5rem'
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                            <span style={{ fontSize: '0.8rem', fontWeight: 'bold', color: '#ff4444', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                              ▶️ YouTube Music & Playlist Integration
+                            </span>
+                          </div>
+                          <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', margin: '0 0 0.75rem 0' }}>
+                            Enter a YouTube Playlist or Video URL below to play tracks and embed the player directly into your dashboard.
+                          </p>
+
+                          <div>
+                            <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>
+                              YouTube Playlist or Video Link
+                            </label>
+                            <div style={{ display: 'flex', gap: '0.35rem' }}>
+                              <input 
+                                type="text" 
+                                placeholder="https://www.youtube.com/playlist?list=... or https://youtu.be/..." 
+                                value={youtubeUrl} 
+                                onChange={e => {
+                                  setYoutubeUrl(e.target.value);
+                                  localStorage.setItem('mb_youtube_url', e.target.value);
+                                }} 
+                                style={{ fontSize: '0.75rem', padding: '0.4rem 0.6rem', flex: 1, minWidth: 0 }}
+                              />
+                              <button 
+                                onClick={() => {
+                                  if (!youtubeUrl.trim()) return;
+                                  alert('YouTube URL saved! Track links will launch in YouTube.');
+                                }} 
+                                style={{ fontSize: '0.75rem', padding: '0.4rem 0.75rem', height: 'auto', background: '#ff0000', color: 'white', border: 'none', margin: 0 }}
+                              >
+                                Save Link
+                              </button>
+                            </div>
+                          </div>
+
+                          {getYouTubeEmbedUrl(youtubeUrl) ? (
+                            <div style={{ marginTop: '0.75rem', borderRadius: '0.5rem', overflow: 'hidden', border: '1px solid rgba(255, 0, 0, 0.3)' }}>
+                              <iframe 
+                                src={getYouTubeEmbedUrl(youtubeUrl)!}
+                                width="100%" 
+                                height="220" 
+                                title="YouTube Player Widget"
+                                frameBorder="0" 
+                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                                allowFullScreen
+                                style={{ display: 'block', width: '100%' }}
+                              />
+                            </div>
+                          ) : (
+                            youtubeUrl && (
+                              <div style={{ marginTop: '0.5rem', padding: '0.5rem', background: 'rgba(255,0,0,0.1)', borderRadius: '0.5rem', fontSize: '0.75rem', textAlign: 'center' }}>
+                                <a href={youtubeUrl} target="_blank" rel="noreferrer" style={{ color: '#ff4444', fontWeight: 'bold' }}>
+                                  🔗 Open YouTube Link in New Tab
+                                </a>
+                              </div>
+                            )
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Amazon Music Tab content */}
+                    {activeImportTab === 'AMAZON' && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                        <div style={{
+                          background: 'rgba(255, 153, 0, 0.05)',
+                          border: '1px solid rgba(255, 153, 0, 0.2)',
+                          padding: '0.75rem',
+                          borderRadius: '0.5rem'
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                            <span style={{ fontSize: '0.8rem', fontWeight: 'bold', color: '#ff9900', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                              📦 Amazon Music Playlist Integration
+                            </span>
+                          </div>
+                          <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', margin: '0 0 0.75rem 0' }}>
+                            Enter an Amazon Music Playlist or Album URL below to launch tracks and embed the player.
+                          </p>
+
+                          <div>
+                            <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>
+                              Amazon Music Playlist or Album Link
+                            </label>
+                            <div style={{ display: 'flex', gap: '0.35rem' }}>
+                              <input 
+                                type="text" 
+                                placeholder="https://music.amazon.com/playlists/... or albums/..." 
+                                value={amazonUrl} 
+                                onChange={e => {
+                                  setAmazonUrl(e.target.value);
+                                  localStorage.setItem('mb_amazon_url', e.target.value);
+                                }} 
+                                style={{ fontSize: '0.75rem', padding: '0.4rem 0.6rem', flex: 1, minWidth: 0 }}
+                              />
+                              <button 
+                                onClick={() => {
+                                  if (!amazonUrl.trim()) return;
+                                  alert('Amazon Music URL saved! Track links will launch in Amazon Music.');
+                                }} 
+                                style={{ fontSize: '0.75rem', padding: '0.4rem 0.75rem', height: 'auto', background: '#ff9900', color: 'white', border: 'none', margin: 0 }}
+                              >
+                                Save Link
+                              </button>
+                            </div>
+                          </div>
+
+                          {getAmazonEmbedUrl(amazonUrl) ? (
+                            <div style={{ marginTop: '0.75rem', borderRadius: '0.5rem', overflow: 'hidden', border: '1px solid rgba(255, 153, 0, 0.3)' }}>
+                              <iframe 
+                                src={getAmazonEmbedUrl(amazonUrl)!}
+                                width="100%" 
+                                height="220" 
+                                title="Amazon Music Player Widget"
+                                frameBorder="0" 
+                                allow="autoplay; encrypted-media" 
+                                style={{ display: 'block', width: '100%' }}
+                              />
+                            </div>
+                          ) : (
+                            amazonUrl && (
+                              <div style={{ marginTop: '0.5rem', padding: '0.5rem', background: 'rgba(255,153,0,0.1)', borderRadius: '0.5rem', fontSize: '0.75rem', textAlign: 'center' }}>
+                                <a href={amazonUrl} target="_blank" rel="noreferrer" style={{ color: '#ff9900', fontWeight: 'bold' }}>
+                                  🔗 Open Amazon Music Link in New Tab
+                                </a>
+                              </div>
+                            )
+                          )}
+                        </div>
                       </div>
                     )}
 
@@ -2952,7 +3263,9 @@ const AdminDashboard: React.FC = () => {
                         </div>
                       ) : (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '240px', overflowY: 'auto', paddingRight: '0.5rem', marginBottom: '1.25rem', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '1rem', padding: '0.75rem', background: 'rgba(0,0,0,0.1)' }}>
-                          <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 'bold', marginBottom: '0.25rem', textAlign: 'left' }}>Click Call or Play on Spotify:</div>
+                          <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 'bold', marginBottom: '0.25rem', textAlign: 'left' }}>
+                            Click Call or Play on {activeImportTab === 'SPOTIFY' ? 'Spotify' : activeImportTab === 'YOUTUBE' ? 'YouTube' : activeImportTab === 'AMAZON' ? 'Amazon Music' : 'Active Player'}:
+                          </div>
                           {playlist
                             .map((song, index) => ({ song, id: index + 1 }))
                             .filter(item => !calledNumbers.includes(item.id))
@@ -2972,16 +3285,22 @@ const AdminDashboard: React.FC = () => {
                               >
                                 <span 
                                   style={{ fontSize: '0.85rem', textAlign: 'left', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }} 
-                                  title={typeof item.song === 'object' && item.song !== null ? (item.song as any).name : item.song}
+                                  title={formatTrackName(item.song)}
                                 >
-                                  {typeof item.song === 'object' && item.song !== null ? (item.song as any).name : item.song}
+                                  {formatTrackName(item.song)}
                                 </span>
                                 <div style={{ display: 'flex', gap: '0.35rem' }}>
                                   <button 
                                     onClick={() => playTrack(item.id)}
                                     disabled={isCallingPaused}
                                     style={{ 
-                                      background: '#1db954', 
+                                      background: activeImportTab === 'SPOTIFY' 
+                                        ? '#1db954' 
+                                        : activeImportTab === 'YOUTUBE' 
+                                        ? '#ff0000' 
+                                        : activeImportTab === 'AMAZON' 
+                                        ? '#ff9900' 
+                                        : 'var(--secondary)', 
                                       color: 'white',
                                       fontSize: '0.75rem', 
                                       padding: '0.25rem 0.5rem',
