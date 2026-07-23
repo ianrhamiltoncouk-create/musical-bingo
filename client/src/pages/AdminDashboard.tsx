@@ -977,6 +977,17 @@ const AdminDashboard: React.FC = () => {
       setSpotifySyncEnabled(data.enabled);
     });
 
+    socket.on('SPOTIFY_TRACK_DETECTED', (data: { title: string, artist: string, fullTitle: string, matchedNumber?: number }) => {
+      if (data && data.fullTitle) {
+        setSpotifyTelemetry((prev: any) => ({
+          ...(prev || {}),
+          detectedTitle: data.fullTitle,
+          pollerActive: true,
+          matchResult: data.matchedNumber ? `Matched Song #${data.matchedNumber}` : 'Track Active'
+        }));
+      }
+    });
+
     socket.on('GAME_STARTED', () => fetchGame(game.id));
     socket.on('FINALE_STARTED', () => fetchGame(game.id));
     socket.on('GAME_FINISHED', () => fetchGame(game.id));
