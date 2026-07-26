@@ -21,8 +21,9 @@ const sanitizeRedirectUrl = (url: string): string => {
 
 interface PlayerData {
   playerId: string;
-  card: (number | string)[][];
+  card: (number | string)[][] | null;
   gameId: string;
+  name?: string;
 }
 
 interface Winner {
@@ -33,18 +34,21 @@ interface Winner {
 const GamePage: React.FC = () => {
   const [playerData, setPlayerData] = useState<PlayerData | null>(null);
   const [customBranding, setCustomBranding] = useState<any | null>(null);
+  const [joinedPlayersCount, setJoinedPlayersCount] = useState<number>(1);
   
   useEffect(() => {
     const saved = sessionStorage.getItem('bingo_player');
     if (saved) {
       const data = JSON.parse(saved);
-      const size = data.card.length;
-      const isWrongSize = (size !== 3 && size !== 4) || data.card.some((row: any) => row.length !== size);
-      
-      if (isWrongSize) {
-        sessionStorage.removeItem('bingo_player');
-        window.location.href = '/';
-        return;
+      if (data.card) {
+        const size = data.card.length;
+        const isWrongSize = (size !== 3 && size !== 4) || data.card.some((row: any) => row.length !== size);
+        
+        if (isWrongSize) {
+          sessionStorage.removeItem('bingo_player');
+          window.location.href = '/';
+          return;
+        }
       }
       
       // Verify with the backend if this specific game ID is still active
@@ -64,6 +68,20 @@ const GamePage: React.FC = () => {
                 setGameStatus('FINISHED');
                 if (activeGame.promo_image) {
                   setFinishedPromoImage(activeGame.promo_image);
+                }
+              } else if (activeGame.status === 'STARTED' || activeGame.status === 'FINALE') {
+                setGameStatus(activeGame.status);
+                // Fetch player card if not already in session
+                if (!data.card) {
+                  const cardRes = await fetch(`${API_BASE}/api/game/player-card?playerId=${data.playerId}`);
+                  if (cardRes.ok) {
+                    const cardData = await cardRes.json();
+                    if (cardData.card) {
+                      data.card = cardData.card;
+                      sessionStorage.setItem('bingo_player', JSON.stringify(data));
+                      setPlayerData({ ...data });
+                    }
+                  }
                 }
               }
             }
@@ -109,6 +127,10 @@ const GamePage: React.FC = () => {
           if (gameRes.ok) {
             const gameData = await gameRes.json();
             setGameType(gameData.game_type || 'MUSIC');
+            setGameStatus(gameData.status || 'WAITING');
+            if (gameData.joinedPlayersCount) {
+              setJoinedPlayersCount(gameData.joinedPlayersCount);
+            }
             if (gameData.playlist) {
               const parsed = JSON.parse(gameData.playlist);
               if (Array.isArray(parsed)) {
@@ -122,7 +144,7 @@ const GamePage: React.FC = () => {
       };
       getGameDetails();
     }
-  }, [playerData]);
+  }, [playerData?.gameId]);
 
   const handleCellClick = (num: number) => {
     setUserMarked(prev => {
@@ -142,6 +164,12 @@ const GamePage: React.FC = () => {
     socket.connect();
     socket.emit('JOIN_ROOM', { gameId: playerData.gameId });
 
+    socket.on('LOBBY_PLAYERS_UPDATED', (data: { joinedPlayersCount: number }) => {
+      if (data && data.joinedPlayersCount) {
+        setJoinedPlayersCount(data.joinedPlayersCount);
+      }
+    });
+
     socket.on('NUMBER_CALLED', (data: { number: number, allNumbers: number[] }) => {
       setCalledNumbers(new Set(data.allNumbers));
       setLastCalled(data.number);
@@ -156,7 +184,71 @@ const GamePage: React.FC = () => {
       }
     });
 
-    socket.on('GAME_STARTED', () => setGameStatus('STARTED'));
+    socket.on('GAME_STARTED', async () => {
+      setGameStatus('STARTED');
+      if (playerData?.playerId) {
+        try {
+          const res = await fetch(`${API_BASE}/api/game/player-card?playerId=${playerData.playerId}`);
+          if (res.ok) {
+            const data = await res.json();
+            if (data.card) {
+              setPlayerData(prev => prev ? { ...prev, card: data.card } : null);
+              const saved = sessionStorage.getItem('bingo_player');
+              if (saved) {
+                const parsed = JSON.parse(saved);
+                parsed.card = data.card;
+                sessionStorage.setItem('bingo_player', JSON.stringify(parsed));
+              }
+            }
+          }
+        } catch (err) {
+          console.error('Failed to fetch card on game start:', err);
+        }
+      }
+    });
+    
+    socket.on('FINALE_STARTED', () => setGameStatus('FINALE'));
+    
+    socket.on('GAME_FINISHED', (data?: { redirectUrl?: string; redirectDelay?: number; autoRedirectEnabled?: number; promoImage?: string; promoImageDelay?: number }) => {
+      setGameStatus('FINISHED');
+      if (data && data.promoImage) {
+        const delayMs = (data.promoImageDelay ?? 0) * 1000;
+        setTimeout(() => {
+          setFinishedPromoImage(data.promoImage || '');
+        }, delayMs);
+      }
+      if (data && data.redirectUrl && data.autoRedirectEnabled !== 0) {
+        const url = sanitizeRedirectUrl(data.redirectUrl);
+        const delayMs = (data.redirectDelay ?? 30) * 1000;
+        console.log(`Game finished. Auto-redirecting to: ${url} in ${delayMs / 1000}s`);
+        setTimeout(() => {
+          window.location.href = url;
+        }, delayMs);
+      } else {
+        console.log('Game finished. Auto-redirect is disabled or redirect URL is missing.');
+      }
+    });
+    
+    socket.on('GAME_RESET', () => {
+      console.log('Game has been reset by admin. Redirecting...');
+      sessionStorage.removeItem('bingo_player');
+      window.location.href = '/';
+    });
+
+    socket.on('FORCE_REDIRECT', (data: { redirectUrl: string }) => {
+      if (data && data.redirectUrl) {
+        const url = sanitizeRedirectUrl(data.redirectUrl);
+        console.log('Forced redirect received. Navigating to:', data.redirectUrl);
+        window.location.href = url;
+      }
+    });
+
+    socket.on('PLAYLIST_UPDATED', (data: { playlist: any[] }) => {
+      console.log('Playlist updated via socket (player):', data.playlist);
+      if (Array.isArray(data.playlist)) {
+        setPlaylist(data.playlist);
+      }
+    });
     socket.on('FINALE_STARTED', () => setGameStatus('FINALE'));
     
     socket.on('GAME_FINISHED', (data?: { redirectUrl?: string; redirectDelay?: number; autoRedirectEnabled?: number; promoImage?: string; promoImageDelay?: number }) => {
@@ -209,6 +301,7 @@ const GamePage: React.FC = () => {
     });
 
     return () => {
+      socket.off('LOBBY_PLAYERS_UPDATED');
       socket.off('NUMBER_CALLED');
       socket.off('WINNERS_UPDATE');
       socket.off('GAME_STARTED');
@@ -253,6 +346,72 @@ const GamePage: React.FC = () => {
   if (!playerData) return <div>Loading...</div>;
 
   const activeBranding = customBranding || branding;
+
+  if (!playerData.card || gameStatus === 'WAITING') {
+    return (
+      <div className="card" style={{ textAlign: 'center', padding: '2.5rem 1.5rem', marginTop: '2rem' }}>
+        {activeBranding?.logoUrl && (
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1.5rem' }}>
+            <img 
+              src={activeBranding.logoUrl} 
+              alt="Logo" 
+              style={{ maxHeight: '80px', maxWidth: '240px', objectFit: 'contain' }} 
+            />
+          </div>
+        )}
+        <div style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '0.5rem',
+          background: 'rgba(236, 72, 153, 0.15)',
+          border: '1px solid var(--primary)',
+          color: 'var(--primary)',
+          padding: '0.4rem 1rem',
+          borderRadius: '2rem',
+          fontSize: '0.85rem',
+          fontWeight: 800,
+          textTransform: 'uppercase',
+          letterSpacing: '1px',
+          marginBottom: '1.5rem'
+        }}>
+          <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--primary)', boxShadow: '0 0 10px var(--primary)' }}></span>
+          Lobby Open
+        </div>
+
+        <h1 style={{ fontSize: '1.75rem', fontWeight: 900, marginBottom: '0.5rem' }}>
+          Welcome, {playerData.name || 'Player'}! 👋
+        </h1>
+        
+        <p style={{ color: 'var(--secondary)', fontSize: '1.05rem', maxWidth: '420px', margin: '0 auto 2rem auto', lineHeight: 1.5 }}>
+          Cards will be generated as soon as all players have joined and the host starts the game.
+        </p>
+
+        <div style={{
+          background: 'rgba(255, 255, 255, 0.03)',
+          border: '1px solid rgba(255, 255, 255, 0.08)',
+          borderRadius: '1.25rem',
+          padding: '1.5rem',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: '0.5rem',
+          maxWidth: '320px',
+          margin: '0 auto'
+        }}>
+          <div style={{ fontSize: '2.5rem', fontWeight: 900, color: 'var(--accent)' }}>
+            {joinedPlayersCount}
+          </div>
+          <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)', fontWeight: 600 }}>
+            Players currently in lobby
+          </div>
+        </div>
+
+        <div style={{ marginTop: '2.5rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+          ⏳ Please stay on this screen. Your card will appear automatically when the host starts!
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>

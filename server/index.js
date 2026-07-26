@@ -5,7 +5,7 @@ const cors = require('cors');
 const { v4: uuidv4 } = require('uuid');
 const os = require('os');
 const { initDb, getDb } = require('./db');
-const { generateMusicalCard, generatePartyClimaxCard, checkWin } = require('./bingoLogic');
+const { generateMusicalCard, generatePartyClimaxCard, checkWin, createDeterministicCallOrder } = require('./bingoLogic');
 const { exec } = require('child_process');
 
 const app = express();
@@ -587,7 +587,7 @@ app.get('/api/game', async (req, res) => {
   });
 });
 
-// Admin: Start game (and select target winner)
+// Admin: Start game (generate cards for all lobby players & lock call order)
 app.post('/api/game/start', async (req, res) => {
   const { gameId } = req.body;
   if (!gameId) return res.status(400).json({ error: 'gameId required' });
@@ -595,17 +595,49 @@ app.post('/api/game/start', async (req, res) => {
   const game = await db.get('SELECT * FROM games WHERE id = ?', [gameId]);
   if (!game) return res.status(404).json({ error: 'No game found' });
 
-  // Choose a random player as the target winner
-  const players = await db.all('SELECT id FROM players WHERE game_id = ?', [gameId]);
+  const players = await db.all('SELECT * FROM players WHERE game_id = ?', [gameId]);
+  const playlist = JSON.parse(game.playlist || '[]');
+  const playlistSize = playlist.length || 50;
+  const gridSz = game.grid_size || 3;
+  const freeSp = !!game.free_space_enabled;
+
+  const generatedCards = [];
+  for (const p of players) {
+    let card;
+    if (game.game_type === 'NUMERIC') {
+      if (game.game_mode === 'PARTY_CLIMAX') {
+        const anchors = JSON.parse(game.finale_numbers || '[]');
+        card = generatePartyClimaxCard(90, anchors, gridSz, freeSp);
+      } else {
+        card = generateMusicalCard(90, gridSz, freeSp);
+      }
+    } else {
+      card = generateMusicalCard(playlistSize, gridSz, freeSp);
+    }
+    await db.run('UPDATE players SET card_data = ? WHERE id = ?', [JSON.stringify(card), p.id]);
+    generatedCards.push(card);
+  }
+
   let winnerId = null;
   if (players.length > 0) {
     const randPlayer = players[Math.floor(Math.random() * players.length)];
     winnerId = randPlayer.id;
   }
 
-  await db.run('UPDATE games SET status = ?, winner_player_id = ? WHERE id = ?', ['STARTED', winnerId, game.id]);
+  const presetOrder = createDeterministicCallOrder(generatedCards, playlistSize, {
+    targetLine: game.target_line === 1,
+    targetTwoLines: game.target_two_lines === 1,
+    targetFullHouse: game.target_full_house === 1,
+    gameMode: game.game_mode
+  });
+
+  await db.run(
+    'UPDATE games SET status = ?, winner_player_id = ?, preset_call_order = ? WHERE id = ?',
+    ['STARTED', winnerId, JSON.stringify(presetOrder), game.id]
+  );
+
   io.to(game.id).emit('GAME_STARTED', { gameId: game.id });
-  res.json({ success: true, winnerPlayerId: winnerId });
+  res.json({ success: true, winnerPlayerId: winnerId, presetCallOrder: presetOrder });
 });
 
 // Admin: Reset game (keeps the room active, code same, resets winner target)
@@ -1065,31 +1097,49 @@ app.post('/api/game/join', async (req, res) => {
   if (game.status === 'FINISHED') return res.status(400).json({ error: 'This game has already finished' });
 
   const playerId = uuidv4();
-  const playlist = JSON.parse(game.playlist || '[]');
-  const playlistSize = playlist.length || 50;
-  
-  // Generate card depending on game type, mode, grid size and free space
-  const gridSz = game.grid_size || 3;
-  const freeSp = !!game.free_space_enabled;
-  let card;
-  if (game.game_type === 'NUMERIC') {
-    if (game.game_mode === 'PARTY_CLIMAX') {
-      const anchors = JSON.parse(game.finale_numbers || '[]');
-      card = generatePartyClimaxCard(90, anchors, gridSz, freeSp);
-    } else {
-      card = generateMusicalCard(90, gridSz, freeSp);
-    }
-  } else {
-    card = generateMusicalCard(playlistSize, gridSz, freeSp);
-  }
   const sessionToken = uuidv4();
+  let card = null;
+
+  // If game already started, generate card immediately for late joiners
+  if (game.status !== 'WAITING') {
+    const playlist = JSON.parse(game.playlist || '[]');
+    const playlistSize = playlist.length || 50;
+    const gridSz = game.grid_size || 3;
+    const freeSp = !!game.free_space_enabled;
+    if (game.game_type === 'NUMERIC') {
+      if (game.game_mode === 'PARTY_CLIMAX') {
+        const anchors = JSON.parse(game.finale_numbers || '[]');
+        card = generatePartyClimaxCard(90, anchors, gridSz, freeSp);
+      } else {
+        card = generateMusicalCard(90, gridSz, freeSp);
+      }
+    } else {
+      card = generateMusicalCard(playlistSize, gridSz, freeSp);
+    }
+  }
 
   await db.run(
     'INSERT INTO players (id, game_id, name, card_data, session_token) VALUES (?, ?, ?, ?, ?)',
-    [playerId, game.id, name, JSON.stringify(card), sessionToken]
+    [playerId, game.id, name, card ? JSON.stringify(card) : null, sessionToken]
   );
 
-  res.json({ playerId, card, sessionToken, gameId: game.id, roomCode: game.room_code });
+  const joinedCount = await db.get('SELECT COUNT(*) as count FROM players WHERE game_id = ?', [game.id]);
+  io.to(game.id).emit('LOBBY_PLAYERS_UPDATED', { joinedPlayersCount: joinedCount.count });
+
+  res.json({ playerId, card, sessionToken, gameId: game.id, roomCode: game.room_code, gameStatus: game.status, name });
+});
+
+// Fetch player card details (used when transitioning from lobby to active game)
+app.get('/api/game/player-card', async (req, res) => {
+  const { playerId } = req.query;
+  if (!playerId) return res.status(400).json({ error: 'playerId required' });
+  const db = getDb();
+  const player = await db.get('SELECT * FROM players WHERE id = ?', [playerId]);
+  if (!player) return res.status(404).json({ error: 'Player not found' });
+
+  const game = await db.get('SELECT status FROM games WHERE id = ?', [player.game_id]);
+  const card = player.card_data ? JSON.parse(player.card_data) : null;
+  res.json({ playerId: player.id, card, name: player.name, gameStatus: game?.status || 'WAITING' });
 });
 
 function songMatches(title, playlistSong) {
@@ -1409,7 +1459,7 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Smart suggestion: only let the designated winner win!
+  // Smart suggestion: use locked preset order or smart algorithm!
   socket.on('ADMIN_GET_AUTO_NUMBER', async (data) => {
     const { gameId } = data;
     if (!gameId) return;
@@ -1417,11 +1467,23 @@ io.on('connection', (socket) => {
     const game = await db.get('SELECT * FROM games WHERE id = ?', [gameId]);
     if (!game) return;
 
-    const playlist = JSON.parse(game.playlist || '[]');
-    const maxRange = game.game_type === 'NUMERIC' ? 90 : (playlist.length || 50);
-
     const alreadyCalledList = await db.all('SELECT number FROM called_numbers WHERE game_id = ?', [gameId]);
     const alreadyCalled = new Set(alreadyCalledList.map(c => c.number));
+
+    if (game.preset_call_order) {
+      try {
+        const presetOrder = JSON.parse(game.preset_call_order);
+        if (Array.isArray(presetOrder)) {
+          const nextUncalled = presetOrder.find(num => !alreadyCalled.has(num));
+          if (nextUncalled !== undefined) {
+            socket.emit('AUTO_NUMBER_SUGGESTION', { number: nextUncalled });
+            return;
+          }
+        }
+      } catch (err) {
+        console.error('Error parsing preset_call_order:', err);
+      }
+    }
 
     // If Party Climax, exclude all 3 anchors from auto-calling suggestions
     if (game.game_type === 'NUMERIC' && game.game_mode === 'PARTY_CLIMAX') {

@@ -168,6 +168,9 @@ async function initDb() {
   try {
     await db.exec(`ALTER TABLE games ADD COLUMN host_device_id TEXT;`);
   } catch (e) {}
+  try {
+    await db.exec(`ALTER TABLE games ADD COLUMN preset_call_order TEXT;`);
+  } catch (e) {}
 
   // Seed a default trial license key for testing
   try {

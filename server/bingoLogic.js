@@ -153,8 +153,91 @@ function checkWin(card, calledNumbers) {
   };
 }
 
+/**
+ * Creates an ordered list of song numbers (1..playlistSize) that avoids simultaneous wins
+ */
+function createDeterministicCallOrder(cards, playlistSize, options = {}) {
+  const { targetLine = true, targetTwoLines = true, targetFullHouse = true, gameMode = 'SINGLE_WINNER' } = options;
+  const total = Math.max(playlistSize || 50, 90);
+  const allNumbers = Array.from({ length: total }, (_, i) => i + 1);
+
+  let bestOrder = null;
+  let attempts = 0;
+
+  while (attempts < 200) {
+    attempts++;
+    const order = [...allNumbers];
+    for (let i = order.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [order[i], order[j]] = [order[j], order[i]];
+    }
+
+    if (!cards || cards.length === 0) {
+      bestOrder = order;
+      break;
+    }
+
+    const calledSet = new Set(["FREE"]);
+    let lineFound = false;
+    let twoLinesFound = false;
+    let fullHouseFound = false;
+    let valid = true;
+
+    for (let step = 0; step < order.length; step++) {
+      calledSet.add(order[step]);
+
+      const currentLineWinners = [];
+      const currentTwoLinesWinners = [];
+      const currentFullHouseWinners = [];
+
+      cards.forEach((card, idx) => {
+        const win = checkWin(card, Array.from(calledSet));
+        if (win.hasLine) currentLineWinners.push(idx);
+        if (win.hasTwoLines) currentTwoLinesWinners.push(idx);
+        if (win.hasFullHouse) currentFullHouseWinners.push(idx);
+      });
+
+      if (targetLine && !lineFound && currentLineWinners.length > 0) {
+        if (currentLineWinners.length > 1) {
+          valid = false;
+          break;
+        }
+        lineFound = true;
+      }
+
+      if (targetTwoLines && !twoLinesFound && currentTwoLinesWinners.length > 0) {
+        if (currentTwoLinesWinners.length > 1) {
+          valid = false;
+          break;
+        }
+        twoLinesFound = true;
+      }
+
+      if (targetFullHouse && !fullHouseFound && currentFullHouseWinners.length > 0) {
+        if (gameMode !== 'PARTY_CLIMAX' && currentFullHouseWinners.length > 1) {
+          valid = false;
+          break;
+        }
+        fullHouseFound = true;
+      }
+    }
+
+    if (valid) {
+      bestOrder = order;
+      break;
+    }
+  }
+
+  if (!bestOrder) {
+    bestOrder = Array.from({ length: total }, (_, i) => i + 1).sort(() => Math.random() - 0.5);
+  }
+
+  return bestOrder;
+}
+
 module.exports = {
   generateMusicalCard,
   generatePartyClimaxCard,
-  checkWin
+  checkWin,
+  createDeterministicCallOrder
 };

@@ -988,6 +988,7 @@ const AdminDashboard: React.FC = () => {
       }
     });
 
+    socket.on('LOBBY_PLAYERS_UPDATED', () => fetchGame(game.id));
     socket.on('GAME_STARTED', () => fetchGame(game.id));
     socket.on('FINALE_STARTED', () => fetchGame(game.id));
     socket.on('GAME_FINISHED', () => fetchGame(game.id));
@@ -2334,7 +2335,108 @@ const AdminDashboard: React.FC = () => {
 
         <div className="admin-controls" style={{ marginTop: '2rem' }}>
           {game.status === 'WAITING' && (
-            <button onClick={startGame} style={{ width: '100%' }}>Start Game</button>
+            <div style={{
+              background: 'linear-gradient(135deg, rgba(236,72,153,0.12) 0%, rgba(99,102,241,0.12) 100%)',
+              border: '2px solid var(--primary)',
+              borderRadius: '1.25rem',
+              padding: '1.75rem 1.25rem',
+              marginBottom: '2rem',
+              textAlign: 'center',
+              boxShadow: '0 8px 30px rgba(236,72,153,0.2)'
+            }}>
+              <div style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                background: 'rgba(236, 72, 153, 0.2)',
+                color: 'var(--primary)',
+                padding: '0.35rem 1rem',
+                borderRadius: '2rem',
+                fontSize: '0.85rem',
+                fontWeight: 800,
+                textTransform: 'uppercase',
+                letterSpacing: '1px',
+                marginBottom: '1rem'
+              }}>
+                <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--primary)', boxShadow: '0 0 10px var(--primary)' }}></span>
+                Lobby Open • Ready for Host
+              </div>
+
+              <h2 style={{ fontSize: '1.75rem', fontWeight: 900, marginBottom: '0.5rem' }}>
+                Ready to Start Musical Bingo?
+              </h2>
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.95rem', maxWidth: '500px', margin: '0 auto 1.5rem auto' }}>
+                Once all players have entered their details in the lobby, click <strong>Start Game</strong> below to generate all player cards and lock the win sequence!
+              </p>
+
+              <div style={{
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center',
+                gap: '1.25rem',
+                marginBottom: '1.75rem',
+                flexWrap: 'wrap'
+              }}>
+                <div style={{
+                  background: 'rgba(255,255,255,0.05)',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  padding: '0.75rem 1.25rem',
+                  borderRadius: '0.875rem',
+                  minWidth: '130px'
+                }}>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', fontWeight: 700 }}>ROOM CODE</span>
+                  <strong style={{ fontSize: '1.5rem', color: 'var(--secondary)', letterSpacing: '2px' }}>{game.room_code || '---'}</strong>
+                </div>
+                <div style={{
+                  background: 'rgba(255,255,255,0.05)',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  padding: '0.75rem 1.25rem',
+                  borderRadius: '0.875rem',
+                  minWidth: '130px'
+                }}>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', fontWeight: 700 }}>PLAYERS IN LOBBY</span>
+                  <strong style={{ fontSize: '1.5rem', color: 'var(--accent)' }}>{joinedCount}</strong>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem', maxWidth: '480px', margin: '0 auto' }}>
+                <button 
+                  onClick={async () => {
+                    await startGame();
+                  }}
+                  style={{
+                    width: '100%',
+                    background: 'linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%)',
+                    fontSize: '1.2rem',
+                    fontWeight: 900,
+                    padding: '1rem',
+                    borderRadius: '1rem',
+                    boxShadow: '0 4px 20px rgba(236,72,153,0.4)',
+                    letterSpacing: '0.5px'
+                  }}
+                >
+                  🚀 START GAME & GENERATE CARDS
+                </button>
+
+                <button 
+                  onClick={() => {
+                    setIsPresenterMode(true);
+                  }}
+                  style={{
+                    width: '100%',
+                    background: 'rgba(255,255,255,0.08)',
+                    border: '1px solid rgba(255,255,255,0.2)',
+                    fontSize: '0.95rem',
+                    fontWeight: 700,
+                    padding: '0.75rem',
+                    borderRadius: '0.875rem',
+                    boxShadow: 'none'
+                  }}
+                >
+                  📺 Launch Full Screen (Presenter Mode)
+                </button>
+              </div>
+            </div>
           )}
           
           {(game.status === 'WAITING' || game.status === 'STARTED' || game.status === 'FINALE') && (
