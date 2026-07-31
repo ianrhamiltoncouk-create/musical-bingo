@@ -158,7 +158,7 @@ function checkWin(card, calledNumbers) {
  */
 function createDeterministicCallOrder(cards, playlistSize, options = {}) {
   const { targetLine = true, targetTwoLines = true, targetFullHouse = true, gameMode = 'SINGLE_WINNER' } = options;
-  const total = Math.max(playlistSize || 50, 90);
+  const total = Math.max(0, Math.floor(Number(playlistSize) || 0));
   const allNumbers = Array.from({ length: total }, (_, i) => i + 1);
 
   let bestOrder = null;

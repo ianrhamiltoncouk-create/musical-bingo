@@ -598,6 +598,7 @@ app.post('/api/game/start', async (req, res) => {
   const players = await db.all('SELECT * FROM players WHERE game_id = ?', [gameId]);
   const playlist = JSON.parse(game.playlist || '[]');
   const playlistSize = playlist.length || 50;
+  const callRange = game.game_type === 'NUMERIC' ? 90 : playlist.length;
   const gridSz = game.grid_size || 3;
   const freeSp = !!game.free_space_enabled;
 
@@ -624,7 +625,7 @@ app.post('/api/game/start', async (req, res) => {
     winnerId = randPlayer.id;
   }
 
-  const presetOrder = createDeterministicCallOrder(generatedCards, playlistSize, {
+  const presetOrder = createDeterministicCallOrder(generatedCards, callRange, {
     targetLine: game.target_line === 1,
     targetTwoLines: game.target_two_lines === 1,
     targetFullHouse: game.target_full_house === 1,
@@ -1469,12 +1470,26 @@ io.on('connection', (socket) => {
 
     const alreadyCalledList = await db.all('SELECT number FROM called_numbers WHERE game_id = ?', [gameId]);
     const alreadyCalled = new Set(alreadyCalledList.map(c => c.number));
+    const playlist = game.game_type === 'MUSIC' ? JSON.parse(game.playlist || '[]') : [];
+    const maxRange = game.game_type === 'NUMERIC' ? 90 : playlist.length;
+
+    if (maxRange === 0) {
+      socket.emit('AUTO_NUMBER_UNAVAILABLE', { error: 'Add tracks to the playlist before calling a ball.' });
+      return;
+    }
 
     if (game.preset_call_order) {
       try {
         const presetOrder = JSON.parse(game.preset_call_order);
         if (Array.isArray(presetOrder)) {
-          const nextUncalled = presetOrder.find(num => !alreadyCalled.has(num));
+          // The range check also protects games started before playlist-sized
+          // call orders were introduced.
+          const nextUncalled = presetOrder.find(num =>
+            Number.isInteger(num) &&
+            num >= 1 &&
+            num <= maxRange &&
+            !alreadyCalled.has(num)
+          );
           if (nextUncalled !== undefined) {
             socket.emit('AUTO_NUMBER_SUGGESTION', { number: nextUncalled });
             return;
@@ -1662,6 +1677,10 @@ async function callNumberHelper(gameId, number, io) {
 
     if (game.game_type === 'MUSIC') {
       const playlist = JSON.parse(game.playlist || '[]');
+      if (!Number.isInteger(number) || number < 1 || number > playlist.length) {
+        console.warn(`[Music Call] Ignoring out-of-range track ${number}; playlist has ${playlist.length} tracks.`);
+        return;
+      }
       const songItem = playlist[number - 1];
       if (songItem && typeof songItem === 'object' && songItem.uri) {
         playSpotifyTrack(gameId, songItem.uri, io).catch(err => console.error('[Spotify AutoPlay] Error:', err));
