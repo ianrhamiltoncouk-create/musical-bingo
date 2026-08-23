@@ -113,8 +113,7 @@ const AdminDashboard: React.FC = () => {
   const [showFireworks, setShowFireworks] = useState<boolean>(false);
   const [connectedCount, setConnectedCount] = useState<number>(0);
   const [joinedCount, setJoinedCount] = useState<number>(0);
-  const [isTuning, setIsTuning] = useState<boolean>(false);
-  const isTuningRef = React.useRef<boolean>(false);
+  const isSwitchingTrackRef = React.useRef<boolean>(false);
 
   const { branding, refreshBranding } = useBranding();
 
@@ -1072,12 +1071,8 @@ const AdminDashboard: React.FC = () => {
     setSavedPlaylists(updated);
   };
 
-  const playTuningSoundEffect = (): Promise<void> => {
-    return Promise.resolve();
-  };
-
   const playTrack = async (id: number) => {
-    if (isTuningRef.current) return;
+    if (isSwitchingTrackRef.current) return;
 
     const track = activeImportTab === 'LOCAL_FILES' ? audioFilesRef.current.find(t => t.id === id) : null;
     if (!track) {
@@ -1088,9 +1083,7 @@ const AdminDashboard: React.FC = () => {
           await resumeMusic();
         }
       } else {
-        isTuningRef.current = true;
-        setIsTuning(true);
-        socket.emit('TUNING_STARTED', { gameId: game?.id });
+        isSwitchingTrackRef.current = true;
 
         if (audioRef.current && !audioRef.current.paused) {
           await fadeAudio(audioRef.current, audioRef.current.volume, 0, 1000);
@@ -1108,14 +1101,10 @@ const AdminDashboard: React.FC = () => {
           }
         }
 
-        await playTuningSoundEffect();
-
         setCurrentPlayingId(id);
         setIsPlaying(true);
         
-        isTuningRef.current = false;
-        setIsTuning(false);
-        socket.emit('TUNING_FINISHED', { gameId: game?.id });
+        isSwitchingTrackRef.current = false;
 
         const playlistItem = playlist[id - 1];
         const trackObj = typeof playlistItem === 'object' && playlistItem !== null ? playlistItem : { name: String(playlistItem) };
@@ -1170,9 +1159,7 @@ const AdminDashboard: React.FC = () => {
       return;
     }
 
-    isTuningRef.current = true;
-    setIsTuning(true);
-    socket.emit('TUNING_STARTED', { gameId: game?.id });
+    isSwitchingTrackRef.current = true;
 
     if (!audioRef.current.paused) {
       await fadeAudio(audioRef.current, audioRef.current.volume, 0, 1200);
@@ -1192,8 +1179,6 @@ const AdminDashboard: React.FC = () => {
       }
     }
 
-    await playTuningSoundEffect();
-
     const objectUrl = URL.createObjectURL(track.file);
     audioRef.current.src = objectUrl;
     audioRef.current.volume = 0;
@@ -1206,17 +1191,13 @@ const AdminDashboard: React.FC = () => {
     setIsPlaying(true);
 
     audioRef.current.play().then(async () => {
-      isTuningRef.current = false;
-      setIsTuning(false);
-      socket.emit('TUNING_FINISHED', { gameId: game?.id });
+      isSwitchingTrackRef.current = false;
       if (audioRef.current) {
         await fadeAudio(audioRef.current, 0, 1, 1500);
       }
     }).catch(err => {
       console.error('Audio play failed:', err);
-      isTuningRef.current = false;
-      setIsTuning(false);
-      socket.emit('TUNING_FINISHED', { gameId: game?.id });
+      isSwitchingTrackRef.current = false;
     });
   };
 
@@ -1757,12 +1738,9 @@ const AdminDashboard: React.FC = () => {
               >
                 <span className="card-inner">
                   <span className="card-label">
-                    {isTuning ? '📻 Tuning Frequencies...' : (game.game_type === 'MUSIC' ? 'Now Playing' : 'Called Number')}
+                    {game.game_type === 'MUSIC' ? 'Now Playing' : 'Called Number'}
                   </span>
                   {(() => {
-                    if (isTuning) {
-                      return <span className="card-value">📻 Tuning Frequencies...</span>;
-                    }
                     if (!lastCalled) {
                       return <span className="card-value">Waiting...</span>;
                     }

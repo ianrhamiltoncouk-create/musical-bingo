@@ -1436,20 +1436,6 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('TUNING_STARTED', (data) => {
-    const { gameId } = data;
-    if (gameId) {
-      io.to(gameId).emit('TUNING_STARTED');
-    }
-  });
-
-  socket.on('TUNING_FINISHED', (data) => {
-    const { gameId } = data;
-    if (gameId) {
-      io.to(gameId).emit('TUNING_FINISHED');
-    }
-  });
-
   socket.on('disconnecting', () => {
     for (const room of socket.rooms) {
       if (room !== socket.id) {
